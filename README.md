@@ -13,8 +13,6 @@ Type any used car (e.g. "2019 Honda CR-V") and get its full NHTSA safety record 
 - As a **used car buyer**, I want to see a vehicle's recall and complaint history in plain English so I can make an informed purchase decision.
 - As a **buyer comparing options**, I want to see how a vehicle's safety record stacks up against competitors so I can pick the safest option.
 - As a **buyer at a dealership**, I want a printable report with specific next steps (recall campaigns to verify, systems to inspect) so I can negotiate or walk away with confidence.
-- As a **first-time buyer**, I want suggested vehicles and follow-up questions so I don't need to know what to ask.
-
 ## Setup
 
 ```bash
