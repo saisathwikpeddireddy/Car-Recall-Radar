@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 const NHTSA_BASE = 'https://api.nhtsa.gov'
 
@@ -22,6 +22,8 @@ const COMPETITORS = {
   nissan: { altima: [{ make: 'toyota', model: 'camry' }, { make: 'honda', model: 'accord' }] },
   hyundai: { tucson: [{ make: 'toyota', model: 'rav4' }, { make: 'honda', model: 'cr-v' }] },
 }
+
+const MAX_SHORTLIST = 4
 
 async function fetchBenchmark(year, make, model) {
   const comps = COMPETITORS[make]?.[model]
@@ -55,6 +57,11 @@ function isVIN(input) {
   return cleaned.length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)
 }
 
+function extractVINFromURL(input) {
+  const vinMatch = input.match(/[A-HJ-NPR-Z0-9]{17}/i)
+  return vinMatch ? vinMatch[0].toUpperCase() : null
+}
+
 async function fetchVINData(vin) {
   const [decodeRes, recallsRes] = await Promise.all([
     fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`),
@@ -68,7 +75,6 @@ async function fetchVINData(vin) {
   const make = (info.Make || '').toLowerCase()
   const model = (info.Model || '').toLowerCase()
 
-  // Also fetch complaints by decoded make/model/year
   let complaints = { results: [], count: 0 }
   if (year && make && model) {
     try {
@@ -187,6 +193,33 @@ function summarizeNHTSAData(nhtsaData) {
       modelsFound: (nhtsaData.models?.results || []).map((m) => m.vehicleModel),
     },
   }
+}
+
+function encodeShareState(vehicleInfo, nhtsaSummary, mainResult, benchmarks) {
+  const data = {
+    v: vehicleInfo,
+    s: nhtsaSummary,
+    r: mainResult,
+    b: benchmarks,
+  }
+  return btoa(encodeURIComponent(JSON.stringify(data)))
+}
+
+function decodeShareState(hash) {
+  try {
+    return JSON.parse(decodeURIComponent(atob(hash)))
+  } catch {
+    return null
+  }
+}
+
+function getAffiliateLinks(year, make, model) {
+  const q = encodeURIComponent(`${year} ${make} ${model}`)
+  return [
+    { name: 'Carvana', url: `https://www.carvana.com/cars?search=${q}` },
+    { name: 'CarGurus', url: `https://www.cargurus.com/Cars/inventorylisting/viewDetailsFilterViewInventoryListing.action?searchText=${q}` },
+    { name: 'AutoTrader', url: `https://www.autotrader.com/cars-for-sale/all-cars?makeCodeList=${make.toUpperCase()}&searchRadius=0&modelCodeList=${model.toUpperCase()}&startYear=${year}&endYear=${year}` },
+  ]
 }
 
 const SYSTEM_PROMPT = `You are Car Recall Checker, a car safety assistant. You receive raw federal data from NHTSA — the US government's vehicle safety agency — for a specific make, model, and year.
@@ -411,9 +444,7 @@ function AdUnit({ slot, format = 'auto', className = '' }) {
       try {
         ;(window.adsbygoogle = window.adsbygoogle || []).push({})
         pushed.current = true
-      } catch {
-        // AdSense not loaded or blocked
-      }
+      } catch {}
     }
   }, [])
 
@@ -428,6 +459,73 @@ function AdUnit({ slot, format = 'auto', className = '' }) {
         data-full-width-responsive="true"
         ref={adRef}
       />
+    </div>
+  )
+}
+
+function ShortlistCompare({ shortlist, onRemove }) {
+  if (shortlist.length < 2) return null
+
+  const maxRecalls = Math.max(...shortlist.map((s) => s.summary.recalls.total), 1)
+  const maxComplaints = Math.max(...shortlist.map((s) => s.summary.complaints.total), 1)
+
+  const sentimentRank = { green: 0, yellow: 1, red: 2 }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+      <h3 className="font-mono text-xs tracking-widest text-gray-400 mb-4">COMPARE SHORTLIST</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-gray-500 text-[10px] font-mono uppercase tracking-wider">
+              <th className="text-left pb-3 pr-3">Vehicle</th>
+              <th className="text-center pb-3 px-2">Recalls</th>
+              <th className="text-center pb-3 px-2">Complaints</th>
+              <th className="text-center pb-3 px-2">Crashes</th>
+              <th className="text-center pb-3 px-2">Fires</th>
+              <th className="text-center pb-3 px-2">Verdict</th>
+              <th className="pb-3 w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {shortlist.map((item) => {
+              const s = item.summary
+              const sentiment = inferSentiment(item.result)
+              const dotColor = sentiment === 'green' ? 'bg-emerald-500' : sentiment === 'red' ? 'bg-red-500' : 'bg-amber-500'
+              return (
+                <tr key={item.key} className="border-t border-gray-800/50">
+                  <td className="py-3 pr-3">
+                    <div className="text-gray-200 font-mono text-xs">{item.parsed.year} {item.parsed.make.toUpperCase()} {item.parsed.model.toUpperCase()}</div>
+                  </td>
+                  <td className="text-center py-3 px-2 font-mono text-gray-300">{s.recalls.total}</td>
+                  <td className="text-center py-3 px-2 font-mono text-gray-300">{s.complaints.total}</td>
+                  <td className="text-center py-3 px-2 font-mono text-gray-300">{s.complaints.crashes}</td>
+                  <td className="text-center py-3 px-2 font-mono text-gray-300">{s.complaints.fires}</td>
+                  <td className="text-center py-3 px-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${dotColor} mx-auto`} title={sentiment} />
+                  </td>
+                  <td className="py-3 pl-2">
+                    <button onClick={() => onRemove(item.key)} className="text-gray-600 hover:text-gray-400 text-xs transition-colors">&times;</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {shortlist.length >= 2 && (
+        <p className="text-gray-500 text-[10px] mt-3 font-mono">
+          Best pick: {(() => {
+            const sorted = [...shortlist].sort((a, b) => {
+              const sa = sentimentRank[inferSentiment(a.result)] ?? 1
+              const sb = sentimentRank[inferSentiment(b.result)] ?? 1
+              if (sa !== sb) return sa - sb
+              return (a.summary.complaints.total + a.summary.recalls.total) - (b.summary.complaints.total + b.summary.recalls.total)
+            })
+            return `${sorted[0].parsed.year} ${sorted[0].parsed.make.toUpperCase()} ${sorted[0].parsed.model.toUpperCase()}`
+          })()}
+        </p>
+      )}
     </div>
   )
 }
@@ -448,7 +546,60 @@ function App() {
   const [activeView, setActiveView] = useState('home')
   const [benchmarks, setBenchmarks] = useState(null)
   const [contextualSuggestions, setContextualSuggestions] = useState([])
+  const [shortlist, setShortlist] = useState([])
+  const [shareUrl, setShareUrl] = useState('')
+  const [showShareToast, setShowShareToast] = useState(false)
   const conversationRef = useRef([])
+
+  // Load shared report from URL hash on mount
+  useEffect(() => {
+    const hash = window.location.hash.slice(1)
+    if (!hash || hash.length < 10) return
+    const shared = decodeShareState(hash)
+    if (!shared) return
+    setVehicleInfo(shared.v)
+    setNhtsaSummary(shared.s)
+    setMainResult(shared.r)
+    setBenchmarks(shared.b)
+    setActiveView('results')
+    setShowFollowUp(false)
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  function addToShortlist() {
+    if (!vehicleInfo || !nhtsaSummary || !mainResult) return
+    const key = `${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}`
+    setShortlist((prev) => {
+      if (prev.find((s) => s.key === key)) return prev
+      if (prev.length >= MAX_SHORTLIST) return prev
+      return [...prev, { key, parsed: vehicleInfo, summary: nhtsaSummary, result: mainResult }]
+    })
+  }
+
+  function removeFromShortlist(key) {
+    setShortlist((prev) => prev.filter((s) => s.key !== key))
+  }
+
+  function isInShortlist() {
+    if (!vehicleInfo) return false
+    const key = `${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}`
+    return shortlist.some((s) => s.key === key)
+  }
+
+  function generateShareUrl() {
+    if (!vehicleInfo || !nhtsaSummary || !mainResult) return
+    const hash = encodeShareState(vehicleInfo, nhtsaSummary, mainResult, benchmarks)
+    const url = `${window.location.origin}${window.location.pathname}#${hash}`
+    navigator.clipboard.writeText(url).then(() => {
+      setShareUrl(url)
+      setShowShareToast(true)
+      setTimeout(() => setShowShareToast(false), 3000)
+    }).catch(() => {
+      setShareUrl(url)
+      setShowShareToast(true)
+      setTimeout(() => setShowShareToast(false), 3000)
+    })
+  }
 
   async function streamClaude(messages, onChunk, { system, maxTokens } = {}) {
     const response = await fetch('/api/chat', {
@@ -485,6 +636,7 @@ function App() {
     setVehicleInfo(parsed)
     setActiveView('results')
     setStatus('Scanning federal database...')
+    setShareUrl('')
 
     let nhtsaData
     try {
@@ -560,6 +712,7 @@ function App() {
     setLoading(true)
     setActiveView('results')
     setStatus('Decoding VIN...')
+    setShareUrl('')
 
     let vinData
     try {
@@ -615,14 +768,28 @@ function App() {
     e.preventDefault()
     if (!query.trim() || loading) return
 
-    if (isVIN(query)) {
-      runVINSearch(query.trim().toUpperCase())
+    const input = query.trim()
+
+    // Check if it's a URL with a VIN in it
+    if (input.startsWith('http')) {
+      const vin = extractVINFromURL(input)
+      if (vin) {
+        setQuery(vin)
+        runVINSearch(vin)
+        return
+      }
+      setError('Could not find a VIN in that URL. Try pasting just the 17-character VIN.')
       return
     }
 
-    const parsed = parseVehicleInput(query)
+    if (isVIN(input)) {
+      runVINSearch(input.toUpperCase())
+      return
+    }
+
+    const parsed = parseVehicleInput(input)
     if (!parsed) {
-      setError('Enter a year, make & model (e.g. "2019 Honda CR-V") or a 17-character VIN.')
+      setError('Enter a year, make & model (e.g. "2019 Honda CR-V"), a VIN, or paste a car listing URL.')
       return
     }
     runSearch(parsed)
@@ -645,6 +812,7 @@ function App() {
     setBenchmarks(null)
     setContextualSuggestions([])
     setActiveView('results')
+    setShareUrl('')
     conversationRef.current = [...entry.conversation]
     setQuery(`${entry.parsed.year} ${entry.parsed.make} ${entry.parsed.model}`)
   }
@@ -662,6 +830,7 @@ function App() {
     setQuery('')
     setBenchmarks(null)
     setContextualSuggestions([])
+    setShareUrl('')
   }
 
   async function submitFollowUp(question) {
@@ -720,6 +889,7 @@ function App() {
   }
 
   const isHome = activeView === 'home'
+  const affiliateLinks = vehicleInfo ? getAffiliateLinks(vehicleInfo.year, vehicleInfo.make, vehicleInfo.model) : []
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -735,7 +905,7 @@ function App() {
           {isHome && (
             <div className="mt-3">
               <p className="text-gray-500 text-xs mt-2 max-w-md mx-auto leading-relaxed">
-                Look up any used car to see its NHTSA recall history, consumer complaints, and safety investigations — summarized into a plain-English verdict.
+                Look up any used car by name, VIN, or listing URL. See its full NHTSA safety record — recalls, complaints, investigations — in a plain-English verdict.
               </p>
             </div>
           )}
@@ -748,7 +918,7 @@ function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. 2019 Honda CR-V or enter a VIN"
+              placeholder="Year make model, VIN, or paste a listing URL"
               className="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 font-mono text-sm transition-colors"
               disabled={loading}
             />
@@ -777,6 +947,11 @@ function App() {
               ))}
             </div>
 
+            {/* Shortlist compare */}
+            {shortlist.length >= 2 && (
+              <ShortlistCompare shortlist={shortlist} onRemove={removeFromShortlist} />
+            )}
+
             {searchHistory.length > 0 && (
               <div className="mb-6">
                 <h3 className="font-mono text-[10px] tracking-[0.2em] text-gray-400 mb-3 text-center uppercase">Recent</h3>
@@ -796,6 +971,13 @@ function App() {
 
             <AdUnit slot="1234567890" format="horizontal" className="my-6" />
           </>
+        )}
+
+        {/* Share toast */}
+        {showShareToast && (
+          <div className="fixed top-4 right-4 bg-emerald-900/90 border border-emerald-700 text-emerald-200 px-4 py-2.5 rounded-lg text-sm font-mono z-50 animate-fade-in">
+            Link copied to clipboard
+          </div>
         )}
 
         {/* Loading status */}
@@ -831,7 +1013,7 @@ function App() {
                     onError={() => setImageError(true)}
                   />
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <span className="font-mono text-[10px] tracking-[0.2em] text-gray-400 uppercase">Safety Brief</span>
                   <h2 className="text-xl sm:text-2xl text-white font-mono mt-1 truncate">
                     {vehicleInfo.year} {vehicleInfo.make.toUpperCase()} {vehicleInfo.model.toUpperCase()}
@@ -858,7 +1040,31 @@ function App() {
         {mainResult && activeView === 'results' && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 sm:p-6 mb-4">
             {renderSections(mainResult, sentimentColor, sentiment)}
-            <div className="flex justify-end mt-4 pt-3 border-t border-gray-800/50">
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-800/50">
+              <div className="flex gap-3">
+                {/* Save to shortlist */}
+                <button
+                  onClick={addToShortlist}
+                  disabled={isInShortlist() || shortlist.length >= MAX_SHORTLIST}
+                  className="text-[11px] text-gray-400 hover:text-gray-200 disabled:text-gray-600 disabled:cursor-default font-mono tracking-wider transition-colors flex items-center gap-1.5"
+                  title={isInShortlist() ? 'Already in shortlist' : shortlist.length >= MAX_SHORTLIST ? 'Shortlist full (max 4)' : 'Save to compare'}
+                >
+                  <svg className="w-3.5 h-3.5" fill={isInShortlist() ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+                  </svg>
+                  {isInShortlist() ? 'SAVED' : 'SAVE'}
+                </button>
+                {/* Share */}
+                <button
+                  onClick={generateShareUrl}
+                  className="text-[11px] text-gray-400 hover:text-gray-200 font-mono tracking-wider transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                  </svg>
+                  SHARE
+                </button>
+              </div>
               <button
                 onClick={() => window.print()}
                 className="text-[11px] text-gray-400 hover:text-gray-200 font-mono tracking-wider transition-colors flex items-center gap-1.5"
@@ -868,6 +1074,26 @@ function App() {
                 </svg>
                 PRINT
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Affiliate links */}
+        {mainResult && activeView === 'results' && vehicleInfo && (
+          <div className="bg-gray-900/50 border border-gray-800/50 rounded-xl p-4 mb-4">
+            <h3 className="font-mono text-[10px] tracking-[0.2em] text-gray-500 mb-3">FIND THIS VEHICLE</h3>
+            <div className="flex flex-wrap gap-2">
+              {affiliateLinks.map(({ name, url }) => (
+                <a
+                  key={name}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 border border-gray-700/50 hover:border-gray-600 rounded-lg px-3 py-2 transition-all duration-200 font-mono"
+                >
+                  {name} &rarr;
+                </a>
+              ))}
             </div>
           </div>
         )}
