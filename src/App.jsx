@@ -11,12 +11,44 @@ const SUGGESTIONS = [
   { label: '2018 Tesla Model 3', year: '2018', make: 'tesla', model: 'model 3' },
 ]
 
-const FOLLOW_UP_SUGGESTIONS = [
-  'What are the most dangerous recalls?',
-  'Should I worry about the airbag issues?',
-  'How does this compare to similar vehicles?',
-  'What should I check before buying?',
-]
+const COMPETITORS = {
+  honda: { 'cr-v': [{ make: 'toyota', model: 'rav4' }, { make: 'mazda', model: 'cx-5' }] },
+  toyota: { camry: [{ make: 'honda', model: 'accord' }, { make: 'nissan', model: 'altima' }], rav4: [{ make: 'honda', model: 'cr-v' }, { make: 'mazda', model: 'cx-5' }] },
+  ford: { 'f-150': [{ make: 'chevrolet', model: 'silverado 1500' }, { make: 'ram', model: '1500' }] },
+  jeep: { wrangler: [{ make: 'ford', model: 'bronco' }, { make: 'toyota', model: '4runner' }] },
+  kia: { soul: [{ make: 'honda', model: 'hr-v' }, { make: 'hyundai', model: 'kona' }] },
+  tesla: { 'model 3': [{ make: 'chevrolet', model: 'bolt ev' }, { make: 'nissan', model: 'leaf' }] },
+  chevrolet: { 'silverado 1500': [{ make: 'ford', model: 'f-150' }, { make: 'ram', model: '1500' }] },
+  nissan: { altima: [{ make: 'toyota', model: 'camry' }, { make: 'honda', model: 'accord' }] },
+  hyundai: { tucson: [{ make: 'toyota', model: 'rav4' }, { make: 'honda', model: 'cr-v' }] },
+}
+
+async function fetchBenchmark(year, make, model) {
+  const comps = COMPETITORS[make]?.[model]
+  if (!comps) return null
+
+  const results = await Promise.all(
+    comps.map(async (c) => {
+      try {
+        const [recallsRes, complaintsRes] = await Promise.all([
+          fetch(`${NHTSA_BASE}/recalls/recallsByVehicle?make=${c.make}&model=${c.model}&modelYear=${year}`),
+          fetch(`${NHTSA_BASE}/complaints/complaintsByVehicle?make=${c.make}&model=${c.model}&modelYear=${year}`),
+        ])
+        const [recalls, complaints] = await Promise.all([recallsRes.json(), complaintsRes.json()])
+        return {
+          make: c.make,
+          model: c.model,
+          recalls: recalls?.Count ?? recalls?.results?.length ?? 0,
+          complaints: complaints?.count ?? complaints?.results?.length ?? 0,
+        }
+      } catch {
+        return null
+      }
+    })
+  )
+
+  return results.filter(Boolean)
+}
 
 function parseVehicleInput(input) {
   const trimmed = input.trim()
@@ -139,7 +171,21 @@ Any active NHTSA safety investigations. If none, say so.
 VERDICT
 2-3 sentences. Plain English. Should answer: is this a safe used car buy from a federal safety standpoint? Clean, mixed, or concerning — and why.
 
-Write in short paragraphs. No bullet points. No jargon. No hedging.`
+NEXT STEPS
+3-4 specific, actionable things the buyer should do before purchasing this vehicle. Tailor these to the actual recalls and complaints found. Examples: "Ask the dealer for recall completion records for campaigns X and Y", "Have a mechanic inspect the fuel system", "Check NHTSA.gov/recalls with the VIN". Be concrete, not generic.
+
+Write in short paragraphs. No bullet points. No jargon. No hedging.
+
+IMPORTANT: You ONLY discuss vehicle safety, recalls, complaints, NHTSA data, and car buying from a safety perspective. If the user asks about anything unrelated to vehicle safety or car purchasing, politely redirect them back to the vehicle safety topic.`
+
+const FOLLOW_UP_SYSTEM_PROMPT = `You are Car Recall Radar, answering a follow-up question about a vehicle's safety record. You have the full NHTSA data context from earlier in the conversation.
+
+Rules:
+- Keep your answer to ONE short paragraph (3-5 sentences max).
+- Be specific and direct.
+- Only discuss vehicle safety, recalls, complaints, and car buying from a safety perspective.
+- If the user asks about anything unrelated (politics, weather, coding, etc.), respond with: "I can only help with vehicle safety questions. Try asking about this vehicle's recalls, complaints, or what to check before buying."
+- No bullet points. No headers. No lists.`
 
 function inferSentiment(text) {
   const lower = text.toLowerCase()
@@ -204,7 +250,7 @@ function StatsBar({ complaints }) {
 
 function renderSections(text, sentimentColor, sentiment) {
   const sections = []
-  const sectionHeaders = ['RECALLS', 'COMPLAINTS', 'INVESTIGATIONS', 'VERDICT']
+  const sectionHeaders = ['RECALLS', 'COMPLAINTS', 'INVESTIGATIONS', 'VERDICT', 'NEXT STEPS']
   const remaining = text
 
   for (let i = 0; i < sectionHeaders.length; i++) {
@@ -228,19 +274,63 @@ function renderSections(text, sentimentColor, sentiment) {
     return <p className="text-gray-300 whitespace-pre-wrap">{text}</p>
   }
 
-  return sections.map(({ header, content }) => (
-    <div
-      key={header}
-      className={`mb-6 ${header === 'VERDICT' ? `pl-4 border-l-4 ${sentimentColor[sentiment] || 'border-gray-500'}` : ''}`}
-    >
-      <h3 className="font-mono text-sm tracking-widest text-gray-400 mb-2">{header}</h3>
-      {header === 'VERDICT' ? (
-        <p className="text-lg text-gray-100 whitespace-pre-wrap">{content}</p>
-      ) : (
-        <p className="text-gray-300 whitespace-pre-wrap">{content}</p>
-      )}
+  return sections.map(({ header, content }) => {
+    const isVerdict = header === 'VERDICT'
+    const isNextSteps = header === 'NEXT STEPS'
+    let className = 'mb-6'
+    if (isVerdict) className += ` pl-4 border-l-4 ${sentimentColor[sentiment] || 'border-gray-500'}`
+    if (isNextSteps) className += ' pl-4 border-l-4 border-blue-500/60 bg-blue-950/20 rounded-r-lg p-4'
+
+    return (
+      <div key={header} className={className}>
+        <h3 className="font-mono text-sm tracking-widest text-gray-400 mb-2">{header}</h3>
+        {isVerdict ? (
+          <p className="text-lg text-gray-100 whitespace-pre-wrap">{content}</p>
+        ) : (
+          <p className="text-gray-300 whitespace-pre-wrap">{content}</p>
+        )}
+      </div>
+    )
+  })
+}
+
+function BenchmarkBar({ vehicleInfo, nhtsaSummary, benchmarks }) {
+  if (!benchmarks || benchmarks.length === 0 || !nhtsaSummary) return null
+
+  const all = [
+    { make: vehicleInfo.make, model: vehicleInfo.model, recalls: nhtsaSummary.recalls.total, complaints: nhtsaSummary.complaints.total, current: true },
+    ...benchmarks.map((b) => ({ ...b, current: false })),
+  ]
+
+  const maxComplaints = Math.max(...all.map((v) => v.complaints), 1)
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-6">
+      <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-4">VS COMPETITORS ({vehicleInfo.year})</h3>
+      <div className="space-y-3">
+        {all.map((v) => {
+          const pct = Math.round((v.complaints / maxComplaints) * 100)
+          return (
+            <div key={`${v.make}-${v.model}`}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className={`truncate mr-2 ${v.current ? 'text-white font-bold' : 'text-gray-400'}`}>
+                  {v.make.toUpperCase()} {v.model.toUpperCase()}
+                </span>
+                <span className="text-gray-500 font-mono shrink-0">{v.recalls}R / {v.complaints}C</span>
+              </div>
+              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${v.current ? 'bg-amber-500/70' : 'bg-gray-600/50'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-gray-600 text-xs mt-3 font-mono">R = recalls, C = complaints</p>
     </div>
-  ))
+  )
 }
 
 function App() {
@@ -257,13 +347,15 @@ function App() {
   const [imageError, setImageError] = useState(false)
   const [searchHistory, setSearchHistory] = useState([])
   const [activeView, setActiveView] = useState('home')
+  const [benchmarks, setBenchmarks] = useState(null)
+  const [contextualSuggestions, setContextualSuggestions] = useState([])
   const conversationRef = useRef([])
 
-  async function streamClaude(messages, onChunk) {
+  async function streamClaude(messages, onChunk, { system, maxTokens } = {}) {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system: SYSTEM_PROMPT, messages }),
+      body: JSON.stringify({ system: system || SYSTEM_PROMPT, messages, max_tokens: maxTokens }),
     })
 
     if (!response.ok) throw new Error('Claude API request failed')
@@ -287,6 +379,8 @@ function App() {
     setFollowUpThread([])
     setShowFollowUp(false)
     setNhtsaSummary(null)
+    setBenchmarks(null)
+    setContextualSuggestions([])
     setImageError(false)
     setLoading(true)
     setVehicleInfo(parsed)
@@ -337,6 +431,17 @@ function App() {
           ...prev,
         ].slice(0, 10)
       })
+
+      // Fetch benchmarks and contextual suggestions in parallel (non-blocking)
+      fetchBenchmark(parsed.year, parsed.make, parsed.model).then((b) => setBenchmarks(b)).catch(() => {})
+      fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicle: `${parsed.year} ${parsed.make} ${parsed.model}`, verdict: fullText.substring(fullText.indexOf('VERDICT'), fullText.length).substring(0, 300) }),
+      })
+        .then((r) => r.json())
+        .then((suggestions) => { if (Array.isArray(suggestions)) setContextualSuggestions(suggestions.slice(0, 4)) })
+        .catch(() => {})
     } catch {
       setError('Failed to generate safety brief. Please try again.')
     }
@@ -371,6 +476,8 @@ function App() {
     setShowFollowUp(true)
     setError('')
     setImageError(false)
+    setBenchmarks(null)
+    setContextualSuggestions([])
     setActiveView('results')
     conversationRef.current = [...entry.conversation]
     setQuery(`${entry.parsed.year} ${entry.parsed.make} ${entry.parsed.model}`)
@@ -387,6 +494,8 @@ function App() {
     setStatus('')
     setImageError(false)
     setQuery('')
+    setBenchmarks(null)
+    setContextualSuggestions([])
   }
 
   async function submitFollowUp(question) {
@@ -409,7 +518,7 @@ function App() {
           updated[threadIdx] = { question, answer: cleaned }
           return updated
         })
-      })
+      }, { system: FOLLOW_UP_SYSTEM_PROMPT, maxTokens: 300 })
       conversationRef.current.push({ role: 'assistant', content: fullText })
 
       const searchKey = vehicleInfo ? `${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}` : null
@@ -552,12 +661,21 @@ function App() {
 
             {nhtsaSummary && <StatsBar complaints={nhtsaSummary.complaints} />}
             {nhtsaSummary && <ComplaintChart topComponents={nhtsaSummary.complaints.topComponents} />}
+            {vehicleInfo && nhtsaSummary && <BenchmarkBar vehicleInfo={vehicleInfo} nhtsaSummary={nhtsaSummary} benchmarks={benchmarks} />}
           </>
         )}
 
         {mainResult && activeView === 'results' && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
             {renderSections(mainResult, sentimentColor, sentiment)}
+            <div className="flex justify-end mt-4 pt-4 border-t border-gray-800">
+              <button
+                onClick={() => window.print()}
+                className="text-xs text-gray-500 hover:text-gray-300 font-mono tracking-wide transition-colors"
+              >
+                PRINT REPORT
+              </button>
+            </div>
           </div>
         )}
 
@@ -581,18 +699,20 @@ function App() {
 
         {showFollowUp && activeView === 'results' && (
           <>
-            <div className="flex flex-wrap gap-2 mb-3 justify-center">
-              {FOLLOW_UP_SUGGESTIONS.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => submitFollowUp(q)}
-                  disabled={loading}
-                  className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+            {contextualSuggestions.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3 justify-center">
+                {contextualSuggestions.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => submitFollowUp(q)}
+                    disabled={loading}
+                    className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleFollowUp} className="mb-8">
               <div className="flex gap-3">
                 <input

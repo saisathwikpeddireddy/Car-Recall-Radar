@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@media print {
+  body { background: white !important; color: black !important; }
+  .bg-gray-950 { background: white !important; }
+  .bg-gray-900 { background: #f9f9f9 !important; border-color: #ddd !important; }
+  .text-gray-100, .text-gray-200, .text-gray-300, .text-white { color: #111 !important; }
+  .text-gray-400, .text-gray-500 { color: #666 !important; }
+  header button, form, footer, .flex.flex-wrap.gap-2.mb-3 { display: none !important; }
+}
