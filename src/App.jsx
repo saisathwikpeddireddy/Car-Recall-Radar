@@ -194,27 +194,61 @@ function inferSentiment(text) {
   return 'yellow'
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <div className="flex items-center gap-5">
+          <div className="w-48 h-28 bg-gray-800 rounded-lg shrink-0 hidden sm:block" />
+          <div className="flex-1 space-y-3">
+            <div className="h-3 w-20 bg-gray-800 rounded" />
+            <div className="h-7 w-48 bg-gray-800 rounded" />
+            <div className="h-3 w-32 bg-gray-800 rounded" />
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+            <div className="h-6 w-8 bg-gray-800 rounded mx-auto mb-2" />
+            <div className="h-3 w-12 bg-gray-800 rounded mx-auto" />
+          </div>
+        ))}
+      </div>
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="space-y-2">
+            <div className="h-3 w-24 bg-gray-800 rounded" />
+            <div className="h-4 w-full bg-gray-800 rounded" />
+            <div className="h-4 w-3/4 bg-gray-800 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ComplaintChart({ topComponents }) {
   if (!topComponents || topComponents.length === 0) return null
   const max = topComponents[0].count
   const top5 = topComponents.slice(0, 5)
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-6">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
       <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-4">COMPLAINT BREAKDOWN</h3>
       <div className="space-y-3">
         {top5.map(({ component, count }) => {
           const pct = Math.round((count / max) * 100)
-          const label = component.length > 35 ? component.substring(0, 35) + '...' : component
+          const label = component.length > 30 ? component.substring(0, 30) + '...' : component
           return (
             <div key={component}>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-400 truncate mr-2">{label}</span>
                 <span className="text-gray-500 font-mono shrink-0">{count}</span>
               </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-blue-500/60 rounded-full transition-all duration-500"
+                  className="h-full bg-blue-500/60 rounded-full transition-all duration-700 ease-out"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -230,18 +264,18 @@ function StatsBar({ complaints }) {
   if (!complaints) return null
   const stats = [
     { label: 'Complaints', value: complaints.total, color: 'text-gray-100' },
-    { label: 'Crashes', value: complaints.crashes, color: complaints.crashes > 0 ? 'text-red-400' : 'text-gray-400' },
-    { label: 'Fires', value: complaints.fires, color: complaints.fires > 0 ? 'text-orange-400' : 'text-gray-400' },
-    { label: 'Injuries', value: complaints.injuries, color: complaints.injuries > 0 ? 'text-amber-400' : 'text-gray-400' },
-    { label: 'Deaths', value: complaints.deaths, color: complaints.deaths > 0 ? 'text-red-500' : 'text-gray-400' },
+    { label: 'Crashes', value: complaints.crashes, color: complaints.crashes > 0 ? 'text-red-400' : 'text-gray-500' },
+    { label: 'Fires', value: complaints.fires, color: complaints.fires > 0 ? 'text-orange-400' : 'text-gray-500' },
+    { label: 'Injuries', value: complaints.injuries, color: complaints.injuries > 0 ? 'text-amber-400' : 'text-gray-500' },
+    { label: 'Deaths', value: complaints.deaths, color: complaints.deaths > 0 ? 'text-red-500' : 'text-gray-500' },
   ]
 
   return (
-    <div className="grid grid-cols-5 gap-2 mb-6">
+    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
       {stats.map(({ label, value, color }) => (
-        <div key={label} className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-center">
-          <div className={`font-mono text-lg font-bold ${color}`}>{value}</div>
-          <div className="text-gray-500 text-xs mt-1">{label}</div>
+        <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+          <div className={`font-mono text-xl font-bold ${color}`}>{value}</div>
+          <div className="text-gray-600 text-[10px] uppercase tracking-wider mt-1">{label}</div>
         </div>
       ))}
     </div>
@@ -271,24 +305,23 @@ function renderSections(text, sentimentColor, sentiment) {
   }
 
   if (sections.length === 0) {
-    return <p className="text-gray-300 whitespace-pre-wrap">{text}</p>
+    return <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">{text}</p>
   }
 
   return sections.map(({ header, content }) => {
     const isVerdict = header === 'VERDICT'
     const isNextSteps = header === 'NEXT STEPS'
-    let className = 'mb-6'
-    if (isVerdict) className += ` pl-4 border-l-4 ${sentimentColor[sentiment] || 'border-gray-500'}`
-    if (isNextSteps) className += ' pl-4 border-l-4 border-blue-500/60 bg-blue-950/20 rounded-r-lg p-4'
+
+    let wrapperClass = 'mb-5 pb-5 border-b border-gray-800/50 last:border-0 last:mb-0 last:pb-0'
+    if (isVerdict) wrapperClass += ` pl-4 border-l-4 ${sentimentColor[sentiment] || 'border-gray-500'} !border-b-0`
+    if (isNextSteps) wrapperClass += ' pl-4 border-l-4 border-blue-500/50 bg-blue-950/10 rounded-r-lg py-4 pr-4 !border-b-0'
 
     return (
-      <div key={header} className={className}>
-        <h3 className="font-mono text-sm tracking-widest text-gray-400 mb-2">{header}</h3>
-        {isVerdict ? (
-          <p className="text-lg text-gray-100 whitespace-pre-wrap">{content}</p>
-        ) : (
-          <p className="text-gray-300 whitespace-pre-wrap">{content}</p>
-        )}
+      <div key={header} className={wrapperClass}>
+        <h3 className="font-mono text-[11px] tracking-[0.2em] text-gray-500 mb-2">{header}</h3>
+        <p className={`whitespace-pre-wrap leading-relaxed ${isVerdict ? 'text-lg text-gray-100' : 'text-gray-300 text-[15px]'}`}>
+          {content}
+        </p>
       </div>
     )
   })
@@ -305,7 +338,7 @@ function BenchmarkBar({ vehicleInfo, nhtsaSummary, benchmarks }) {
   const maxComplaints = Math.max(...all.map((v) => v.complaints), 1)
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-6">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
       <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-4">VS COMPETITORS ({vehicleInfo.year})</h3>
       <div className="space-y-3">
         {all.map((v) => {
@@ -313,14 +346,14 @@ function BenchmarkBar({ vehicleInfo, nhtsaSummary, benchmarks }) {
           return (
             <div key={`${v.make}-${v.model}`}>
               <div className="flex justify-between text-xs mb-1">
-                <span className={`truncate mr-2 ${v.current ? 'text-white font-bold' : 'text-gray-400'}`}>
+                <span className={`truncate mr-2 ${v.current ? 'text-white font-semibold' : 'text-gray-400'}`}>
                   {v.make.toUpperCase()} {v.model.toUpperCase()}
                 </span>
-                <span className="text-gray-500 font-mono shrink-0">{v.recalls}R / {v.complaints}C</span>
+                <span className="text-gray-500 font-mono shrink-0 text-[11px]">{v.recalls}R / {v.complaints}C</span>
               </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${v.current ? 'bg-amber-500/70' : 'bg-gray-600/50'}`}
+                  className={`h-full rounded-full transition-all duration-700 ease-out ${v.current ? 'bg-amber-500/70' : 'bg-gray-600/40'}`}
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -328,7 +361,7 @@ function BenchmarkBar({ vehicleInfo, nhtsaSummary, benchmarks }) {
           )
         })}
       </div>
-      <p className="text-gray-600 text-xs mt-3 font-mono">R = recalls, C = complaints</p>
+      <p className="text-gray-700 text-[10px] mt-3 font-mono">R = recalls, C = complaints</p>
     </div>
   )
 }
@@ -349,7 +382,7 @@ function AdUnit({ slot, format = 'auto', className = '' }) {
   }, [])
 
   return (
-    <div className={`ad-container my-4 text-center ${className}`}>
+    <div className={`ad-container text-center min-h-0 ${className}`}>
       <ins
         className="adsbygoogle"
         style={{ display: 'block' }}
@@ -462,7 +495,6 @@ function App() {
         ].slice(0, 10)
       })
 
-      // Fetch benchmarks and contextual suggestions in parallel (non-blocking)
       fetchBenchmark(parsed.year, parsed.make, parsed.model).then((b) => setBenchmarks(b)).catch(() => {})
       fetch('/api/suggestions', {
         method: 'POST',
@@ -587,64 +619,67 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="max-w-3xl mx-auto px-4 py-12">
-        <header className="mb-8 text-center">
-          <button onClick={goHome} className="inline-block">
-            <h1 className="font-mono text-4xl font-bold tracking-tight text-white mb-2 hover:text-gray-300 transition-colors">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-16">
+
+        {/* Header */}
+        <header className={`text-center transition-all duration-300 ${isHome ? 'mb-10 pt-8 sm:pt-16' : 'mb-6'}`}>
+          <button onClick={goHome} className="inline-block group">
+            <h1 className={`font-mono font-bold tracking-tight text-white group-hover:text-gray-300 transition-colors ${isHome ? 'text-3xl sm:text-5xl' : 'text-2xl'}`}>
               Car Recall Radar
             </h1>
           </button>
-          <p className="text-gray-500 text-sm tracking-wide">
-            Federal safety data, in plain English.
-          </p>
+          {isHome && (
+            <p className="text-gray-500 text-sm mt-2 tracking-wide">
+              Federal safety data, in plain English.
+            </p>
+          )}
         </header>
 
-        <form onSubmit={handleSearch} className="mb-4">
-          <div className="flex gap-3">
+        {/* Search */}
+        <form onSubmit={handleSearch} className="mb-6">
+          <div className="flex gap-2">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Try: 2017 Ford F-150 or 2019 Honda CR-V"
-              className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
+              placeholder="e.g. 2019 Honda CR-V"
+              className="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 font-mono text-sm transition-colors"
               disabled={loading}
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-600 text-gray-200 px-6 py-3 rounded-lg font-mono text-sm tracking-wide transition-colors"
+              className="bg-white hover:bg-gray-200 disabled:opacity-40 text-gray-950 px-5 sm:px-6 py-3 rounded-xl font-mono text-sm font-semibold tracking-wide transition-colors"
             >
               SCAN
             </button>
           </div>
         </form>
 
-        {/* Home: suggestions + history */}
+        {/* Home view */}
         {isHome && !loading && (
           <>
-            <div className="flex flex-wrap gap-2 mb-8 justify-center">
+            <div className="flex flex-wrap gap-2 mb-6 justify-center">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s.label}
                   onClick={() => handleSuggestion(s)}
-                  className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors"
+                  className="text-xs text-gray-400 hover:text-white bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-600 rounded-lg px-3 py-2 transition-all duration-200"
                 >
                   {s.label}
                 </button>
               ))}
             </div>
 
-            <AdUnit slot="1234567890" format="horizontal" className="mt-4" />
-
             {searchHistory.length > 0 && (
-              <div className="mb-8">
-                <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-3 text-center">RECENT SEARCHES</h3>
+              <div className="mb-6">
+                <h3 className="font-mono text-[10px] tracking-[0.2em] text-gray-600 mb-3 text-center uppercase">Recent</h3>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {searchHistory.map((entry) => (
                     <button
                       key={entry.key}
                       onClick={() => loadFromHistory(entry)}
-                      className="text-xs text-gray-400 hover:text-gray-200 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-600 rounded-lg px-3 py-2 transition-colors font-mono"
+                      className="text-xs text-gray-500 hover:text-gray-200 bg-gray-900/50 hover:bg-gray-800 border border-gray-800/50 hover:border-gray-600 rounded-lg px-3 py-2 transition-all duration-200 font-mono"
                     >
                       {entry.parsed.year} {entry.parsed.make.toUpperCase()} {entry.parsed.model.toUpperCase()}
                     </button>
@@ -652,42 +687,55 @@ function App() {
                 </div>
               </div>
             )}
+
+            <AdUnit slot="1234567890" format="horizontal" className="my-6" />
           </>
         )}
 
+        {/* Loading status */}
         {status && (
-          <div className="text-center mb-6">
-            <p className="text-gray-500 font-mono text-sm animate-pulse">{status}</p>
+          <div className="text-center mb-4">
+            <div className="inline-flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+              <p className="text-gray-500 font-mono text-xs">{status}</p>
+            </div>
           </div>
         )}
 
+        {/* Error */}
         {error && (
-          <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 mb-6">
+          <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4 mb-4">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
+        {/* Loading skeleton */}
+        {loading && activeView === 'results' && !mainResult && <LoadingSkeleton />}
+
+        {/* Results: vehicle header + data viz */}
         {vehicleInfo && activeView === 'results' && (mainResult || loading) && (
           <>
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-4 flex items-center gap-5">
-              {!imageError && (
-                <img
-                  src={getCarImageUrl(vehicleInfo.make, vehicleInfo.model, vehicleInfo.year)}
-                  alt={`${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}`}
-                  className="w-48 h-28 object-contain shrink-0"
-                  onError={() => setImageError(true)}
-                />
-              )}
-              <div>
-                <span className="font-mono text-xs tracking-widest text-gray-500">SAFETY BRIEF</span>
-                <h2 className="text-2xl text-white font-mono mt-1">
-                  {vehicleInfo.year} {vehicleInfo.make.toUpperCase()} {vehicleInfo.model.toUpperCase()}
-                </h2>
-                {nhtsaSummary && (
-                  <p className="text-gray-500 text-xs mt-2 font-mono">
-                    {nhtsaSummary.recalls.total} recalls &middot; {nhtsaSummary.complaints.total} complaints
-                  </p>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-4">
+              <div className="flex items-center gap-5">
+                {!imageError && (
+                  <img
+                    src={getCarImageUrl(vehicleInfo.make, vehicleInfo.model, vehicleInfo.year)}
+                    alt={`${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}`}
+                    className="w-36 sm:w-48 h-24 sm:h-28 object-contain shrink-0 hidden sm:block"
+                    onError={() => setImageError(true)}
+                  />
                 )}
+                <div className="min-w-0">
+                  <span className="font-mono text-[10px] tracking-[0.2em] text-gray-500 uppercase">Safety Brief</span>
+                  <h2 className="text-xl sm:text-2xl text-white font-mono mt-1 truncate">
+                    {vehicleInfo.year} {vehicleInfo.make.toUpperCase()} {vehicleInfo.model.toUpperCase()}
+                  </h2>
+                  {nhtsaSummary && (
+                    <p className="text-gray-500 text-xs mt-2 font-mono">
+                      {nhtsaSummary.recalls.total} recalls &middot; {nhtsaSummary.complaints.total} complaints
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -697,84 +745,85 @@ function App() {
           </>
         )}
 
+        {/* Safety brief */}
         {mainResult && activeView === 'results' && (
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 sm:p-6 mb-4">
             {renderSections(mainResult, sentimentColor, sentiment)}
-            <div className="flex justify-end mt-4 pt-4 border-t border-gray-800">
+            <div className="flex justify-end mt-4 pt-3 border-t border-gray-800/50">
               <button
                 onClick={() => window.print()}
-                className="text-xs text-gray-500 hover:text-gray-300 font-mono tracking-wide transition-colors"
+                className="text-[11px] text-gray-600 hover:text-gray-300 font-mono tracking-wider transition-colors flex items-center gap-1.5"
               >
-                PRINT REPORT
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.25 7.209a48.536 48.536 0 00-10.5 0" />
+                </svg>
+                PRINT
               </button>
             </div>
           </div>
         )}
 
-        {mainResult && activeView === 'results' && <AdUnit slot="0987654321" format="horizontal" />}
+        {/* Ad after results */}
+        {mainResult && activeView === 'results' && <AdUnit slot="0987654321" format="horizontal" className="mb-4" />}
 
+        {/* Follow-up thread */}
         {followUpThread.length > 0 && activeView === 'results' && (
-          <div className="space-y-4 mb-6">
+          <div className="space-y-3 mb-4">
             {followUpThread.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex items-start gap-3 mb-2">
-                  <span className="font-mono text-xs text-gray-500 bg-gray-800 rounded px-2 py-1 shrink-0 mt-0.5">Q</span>
-                  <p className="text-gray-300 text-sm">{item.question}</p>
-                </div>
+              <div key={idx} className="bg-gray-900/50 border border-gray-800/50 rounded-xl p-4">
+                <p className="text-gray-400 text-xs font-mono mb-2 uppercase tracking-wider">Follow-up</p>
+                <p className="text-gray-200 text-sm mb-3">{item.question}</p>
                 {item.answer && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 ml-8">
-                    <p className="text-gray-300 whitespace-pre-wrap text-sm">{item.answer}</p>
-                  </div>
+                  <p className="text-gray-400 whitespace-pre-wrap text-sm leading-relaxed pl-3 border-l-2 border-gray-800">{item.answer}</p>
                 )}
               </div>
             ))}
           </div>
         )}
 
+        {/* Follow-up input + suggestions */}
         {showFollowUp && activeView === 'results' && (
-          <>
+          <div className="mb-8">
             {contextualSuggestions.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3 justify-center">
+              <div className="flex flex-wrap gap-1.5 mb-3">
                 {contextualSuggestions.map((q) => (
                   <button
                     key={q}
                     onClick={() => submitFollowUp(q)}
                     disabled={loading}
-                    className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
+                    className="text-[11px] text-gray-500 hover:text-gray-300 bg-gray-900/50 hover:bg-gray-800 border border-gray-800/50 hover:border-gray-700 rounded-lg px-2.5 py-1.5 transition-all duration-200 disabled:opacity-40"
                   >
                     {q}
                   </button>
                 ))}
               </div>
             )}
-            <form onSubmit={handleFollowUp} className="mb-8">
-              <div className="flex gap-3">
+            <form onSubmit={handleFollowUp}>
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={followUp}
                   onChange={(e) => setFollowUp(e.target.value)}
-                  placeholder="Ask a follow-up question about this vehicle..."
-                  className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
+                  placeholder="Ask a follow-up..."
+                  className="flex-1 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 text-sm transition-colors"
                   disabled={loading}
                 />
                 <button
                   type="submit"
                   disabled={loading || !followUp.trim()}
-                  className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-600 text-gray-200 px-5 py-3 rounded-lg text-sm transition-colors"
+                  className="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-gray-200 px-4 py-2.5 rounded-xl text-sm transition-colors"
                 >
                   Ask
                 </button>
               </div>
             </form>
-          </>
+          </div>
         )}
 
-        <footer className="text-center mt-16 space-y-2">
-          <p className="text-gray-700 text-xs font-mono">
-            Data sourced from NHTSA — National Highway Traffic Safety Administration
-          </p>
-          <p className="text-gray-800 text-xs">
-            Free car recall lookup &middot; Used car safety check &middot; Vehicle complaint search
+        {/* Footer */}
+        <footer className="text-center mt-12 pb-4">
+          <p className="text-gray-800 text-[11px] font-mono">
+            NHTSA &middot; National Highway Traffic Safety Administration
           </p>
         </footer>
       </div>
