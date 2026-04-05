@@ -191,21 +191,21 @@ function summarizeNHTSAData(nhtsaData) {
 
 const SYSTEM_PROMPT = `You are Car Recall Checker, a car safety assistant. You receive raw federal data from NHTSA — the US government's vehicle safety agency — for a specific make, model, and year.
 
-Summarize this data clearly for a regular person shopping for a used car. Be direct and honest. Do not sugarcoat serious issues. Do not over-alarm for minor ones.
+Summarize this data clearly for a regular person shopping for a used car. Be balanced and fair. Do not sugarcoat genuinely serious issues, but also do not catastrophize normal recall volumes — most popular cars have recalls, and a high recall count alone doesn't make a car unsafe (it often means the manufacturer is proactively fixing things).
 
 Your response must include these four sections with these exact headers:
 
 RECALLS
-How many total. How many are open vs resolved. What systems are affected (engine, brakes, airbags, etc.). If zero, say so plainly.
+How many total. What systems are affected (engine, brakes, airbags, etc.). Note that recalls are manufacturer-initiated fixes — having recalls addressed is a good thing. If zero, say so plainly.
 
 COMPLAINTS
-Total complaint volume. Top 2-3 complaint categories and what they describe. Flag anything that appears frequently.
+Total complaint volume. Put this in context — popular vehicles naturally get more complaints due to higher sales volume. Top 2-3 complaint categories and what they describe. Flag anything that appears unusually frequently.
 
 INVESTIGATIONS
 Any active NHTSA safety investigations. If none, say so.
 
 VERDICT
-2-3 sentences. Plain English. Should answer: is this a safe used car buy from a federal safety standpoint? Clean, mixed, or concerning — and why.
+2-3 sentences. Plain English. Give a balanced assessment — consider how this vehicle compares to typical vehicles in its class. A car with 10 recalls but all resolved and no safety-critical complaints may be a perfectly fine buy. Only flag as "concerning" if there are genuinely dangerous unresolved patterns (fires, loss of control, unrepaired critical recalls). Answer: is this a reasonable used car buy from a safety standpoint?
 
 NEXT STEPS
 3-4 specific, actionable things the buyer should do before purchasing this vehicle. Tailor these to the actual recalls and complaints found. Examples: "Ask the dealer for recall completion records for campaigns X and Y", "Have a mechanic inspect the fuel system", "Check NHTSA.gov/recalls with the VIN". Be concrete, not generic.
@@ -734,9 +734,6 @@ function App() {
           </button>
           {isHome && (
             <div className="mt-3">
-              <p className="text-gray-400 text-sm tracking-wide">
-                Federal safety data, in plain English.
-              </p>
               <p className="text-gray-500 text-xs mt-2 max-w-md mx-auto leading-relaxed">
                 Look up any used car to see its NHTSA recall history, consumer complaints, and safety investigations — summarized into a plain-English verdict.
               </p>
