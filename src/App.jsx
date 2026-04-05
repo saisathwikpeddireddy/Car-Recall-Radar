@@ -189,7 +189,7 @@ function summarizeNHTSAData(nhtsaData) {
   }
 }
 
-const SYSTEM_PROMPT = `You are Car Recall Radar, a car safety assistant. You receive raw federal data from NHTSA — the US government's vehicle safety agency — for a specific make, model, and year.
+const SYSTEM_PROMPT = `You are Car Recall Checker, a car safety assistant. You receive raw federal data from NHTSA — the US government's vehicle safety agency — for a specific make, model, and year.
 
 Summarize this data clearly for a regular person shopping for a used car. Be direct and honest. Do not sugarcoat serious issues. Do not over-alarm for minor ones.
 
@@ -214,7 +214,7 @@ Write in short paragraphs. No bullet points. No jargon. No hedging.
 
 IMPORTANT: You ONLY discuss vehicle safety, recalls, complaints, NHTSA data, and car buying from a safety perspective. If the user asks about anything unrelated to vehicle safety or car purchasing, politely redirect them back to the vehicle safety topic.`
 
-const FOLLOW_UP_SYSTEM_PROMPT = `You are Car Recall Radar, answering a follow-up question about a vehicle's safety record. You have the full NHTSA data context from earlier in the conversation.
+const FOLLOW_UP_SYSTEM_PROMPT = `You are Car Recall Checker, answering a follow-up question about a vehicle's safety record. You have the full NHTSA data context from earlier in the conversation.
 
 Rules:
 - Keep your answer to ONE short paragraph (3-5 sentences max).
@@ -729,7 +729,7 @@ function App() {
         <header className={`text-center transition-all duration-300 ${isHome ? 'mb-10 pt-8 sm:pt-16' : 'mb-6'}`}>
           <button onClick={goHome} className="inline-block group">
             <h1 className={`font-mono font-bold tracking-tight text-white group-hover:text-gray-300 transition-colors ${isHome ? 'text-3xl sm:text-5xl' : 'text-2xl'}`}>
-              Car Recall Radar
+              Car Recall Checker
             </h1>
           </button>
           {isHome && (

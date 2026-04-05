@@ -1,4 +1,4 @@
-# Car Recall Radar
+# Car Recall Checker
 
 Federal safety data, in plain English.
 
