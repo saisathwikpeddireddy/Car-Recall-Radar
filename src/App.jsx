@@ -764,21 +764,41 @@ function App() {
     setStatus('')
   }
 
-  function handleSearch(e) {
+  async function handleSearch(e) {
     e.preventDefault()
     if (!query.trim() || loading) return
 
     const input = query.trim()
 
-    // Check if it's a URL with a VIN in it
+    // Check if it's a URL — extract VIN from URL text or fetch the page
     if (input.startsWith('http')) {
-      const vin = extractVINFromURL(input)
-      if (vin) {
-        setQuery(vin)
-        runVINSearch(vin)
+      const vinInUrl = extractVINFromURL(input)
+      if (vinInUrl) {
+        setQuery(vinInUrl)
+        runVINSearch(vinInUrl)
         return
       }
-      setError('Could not find a VIN in that URL. Try pasting just the 17-character VIN.')
+      // VIN not in URL — try scraping the page server-side
+      setLoading(true)
+      setStatus('Extracting VIN from listing...')
+      try {
+        const res = await fetch('/api/extract-vin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: input }),
+        })
+        const { vin } = await res.json()
+        if (vin) {
+          setQuery(vin)
+          setStatus('')
+          setLoading(false)
+          runVINSearch(vin)
+          return
+        }
+      } catch {}
+      setLoading(false)
+      setStatus('')
+      setError('Could not find a VIN in that listing. Try pasting the 17-character VIN directly from the listing page.')
       return
     }
 
