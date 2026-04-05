@@ -2,6 +2,15 @@ import { useState, useRef } from 'react'
 
 const NHTSA_BASE = 'https://api.nhtsa.gov'
 
+const SUGGESTIONS = [
+  { label: '2019 Honda CR-V', year: '2019', make: 'honda', model: 'cr-v' },
+  { label: '2017 Ford F-150', year: '2017', make: 'ford', model: 'f-150' },
+  { label: '2020 Jeep Wrangler', year: '2020', make: 'jeep', model: 'wrangler' },
+  { label: '2019 Kia Soul', year: '2019', make: 'kia', model: 'soul' },
+  { label: '2021 Toyota Camry', year: '2021', make: 'toyota', model: 'camry' },
+  { label: '2018 Tesla Model 3', year: '2018', make: 'tesla', model: 'model 3' },
+]
+
 function parseVehicleInput(input) {
   const trimmed = input.trim()
   const yearMatch = trimmed.match(/\b(19|20)\d{2}\b/)
@@ -17,6 +26,11 @@ function parseVehicleInput(input) {
   const model = words.slice(1).join(' ').toLowerCase().replace(/[^a-z0-9\s-]/g, '')
 
   return { year, make, model }
+}
+
+function getCarImageUrl(make, model, year) {
+  const cleanModel = model.replace(/\s+/g, '-')
+  return `https://cdn.imagin.studio/getimage?customer=hrjavascript-mastery&make=${make}&modelFamily=${cleanModel}&modelYear=${year}&angle=9`
 }
 
 async function fetchNHTSAData(year, make, model) {
@@ -36,7 +50,6 @@ async function fetchNHTSAData(year, make, model) {
 }
 
 function summarizeNHTSAData(nhtsaData) {
-  // Summarize recalls — keep full details since there are typically few
   const recalls = nhtsaData.recalls?.results || []
   const recallSummary = recalls.map((r) => ({
     campaign: r.NHTSACampaignNumber,
@@ -47,7 +60,6 @@ function summarizeNHTSAData(nhtsaData) {
     date: r.ReportReceivedDate,
   }))
 
-  // Summarize complaints — aggregate by component instead of sending all
   const complaints = nhtsaData.complaints?.results || []
   const complaintCount = nhtsaData.complaints?.count || complaints.length
   const componentCounts = {}
@@ -70,7 +82,6 @@ function summarizeNHTSAData(nhtsaData) {
     .slice(0, 10)
     .map(([component, count]) => ({ component, count }))
 
-  // Include a sample of recent complaint summaries for context
   const sampleComplaints = complaints.slice(0, 5).map((c) => ({
     component: c.components,
     summary: c.summary?.substring(0, 300),
@@ -79,11 +90,15 @@ function summarizeNHTSAData(nhtsaData) {
     fire: c.fire,
   }))
 
+  // Build yearly complaint trend
+  const yearlyComplaints = {}
+  complaints.forEach((c) => {
+    const year = c.dateComplaintFiled?.split('/')[2]
+    if (year) yearlyComplaints[year] = (yearlyComplaints[year] || 0) + 1
+  })
+
   return {
-    recalls: {
-      total: recalls.length,
-      details: recallSummary,
-    },
+    recalls: { total: recalls.length, details: recallSummary },
     complaints: {
       total: complaintCount,
       crashes,
@@ -92,6 +107,7 @@ function summarizeNHTSAData(nhtsaData) {
       deaths,
       topComponents,
       sampleComplaints,
+      yearlyTrend: yearlyComplaints,
     },
     modelValidation: {
       modelsFound: (nhtsaData.models?.results || []).map((m) => m.vehicleModel),
@@ -126,6 +142,60 @@ function inferSentiment(text) {
   return 'yellow'
 }
 
+function ComplaintChart({ topComponents }) {
+  if (!topComponents || topComponents.length === 0) return null
+  const max = topComponents[0].count
+  const top5 = topComponents.slice(0, 5)
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-6">
+      <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-4">COMPLAINT BREAKDOWN</h3>
+      <div className="space-y-3">
+        {top5.map(({ component, count }) => {
+          const pct = Math.round((count / max) * 100)
+          const label = component.length > 35 ? component.substring(0, 35) + '...' : component
+          return (
+            <div key={component}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-gray-400 truncate mr-2">{label}</span>
+                <span className="text-gray-500 font-mono shrink-0">{count}</span>
+              </div>
+              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500/60 rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function StatsBar({ complaints }) {
+  if (!complaints) return null
+  const stats = [
+    { label: 'Complaints', value: complaints.total, color: 'text-gray-100' },
+    { label: 'Crashes', value: complaints.crashes, color: complaints.crashes > 0 ? 'text-red-400' : 'text-gray-400' },
+    { label: 'Fires', value: complaints.fires, color: complaints.fires > 0 ? 'text-orange-400' : 'text-gray-400' },
+    { label: 'Injuries', value: complaints.injuries, color: complaints.injuries > 0 ? 'text-amber-400' : 'text-gray-400' },
+    { label: 'Deaths', value: complaints.deaths, color: complaints.deaths > 0 ? 'text-red-500' : 'text-gray-400' },
+  ]
+
+  return (
+    <div className="grid grid-cols-5 gap-2 mb-6">
+      {stats.map(({ label, value, color }) => (
+        <div key={label} className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-center">
+          <div className={`font-mono text-lg font-bold ${color}`}>{value}</div>
+          <div className="text-gray-500 text-xs mt-1">{label}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function App() {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
@@ -135,6 +205,8 @@ function App() {
   const [followUp, setFollowUp] = useState('')
   const [showFollowUp, setShowFollowUp] = useState(false)
   const [vehicleInfo, setVehicleInfo] = useState(null)
+  const [nhtsaSummary, setNhtsaSummary] = useState(null)
+  const [imageError, setImageError] = useState(false)
   const conversationRef = useRef([])
 
   async function streamClaude(messages, onChunk) {
@@ -159,22 +231,13 @@ function App() {
     return fullText
   }
 
-  async function handleSearch(e) {
-    e.preventDefault()
-    if (!query.trim() || loading) return
-
+  async function runSearch(parsed) {
     setError('')
     setResult('')
     setShowFollowUp(false)
+    setNhtsaSummary(null)
+    setImageError(false)
     setLoading(true)
-
-    const parsed = parseVehicleInput(query)
-    if (!parsed) {
-      setError('Could not parse vehicle info. Please enter a year, make, and model (e.g. "2019 Honda CR-V").')
-      setLoading(false)
-      return
-    }
-
     setVehicleInfo(parsed)
     setStatus('Scanning federal database...')
 
@@ -201,11 +264,11 @@ function App() {
       }
     }
 
+    const summary = summarizeNHTSAData(nhtsaData)
+    setNhtsaSummary(summary)
     setStatus('Generating safety brief...')
 
-    const summary = summarizeNHTSAData(nhtsaData)
     const userMessage = `Here is the NHTSA federal safety data for a ${parsed.year} ${parsed.make} ${parsed.model}:\n\n${JSON.stringify(summary, null, 2)}`
-
     conversationRef.current = [{ role: 'user', content: userMessage }]
 
     try {
@@ -218,6 +281,24 @@ function App() {
 
     setLoading(false)
     setStatus('')
+  }
+
+  async function handleSearch(e) {
+    e.preventDefault()
+    if (!query.trim() || loading) return
+
+    const parsed = parseVehicleInput(query)
+    if (!parsed) {
+      setError('Could not parse vehicle info. Please enter a year, make, and model (e.g. "2019 Honda CR-V").')
+      return
+    }
+    runSearch(parsed)
+  }
+
+  function handleSuggestion(s) {
+    if (loading) return
+    setQuery(s.label)
+    runSearch({ year: s.year, make: s.make, model: s.model })
   }
 
   async function handleFollowUp(e) {
@@ -274,7 +355,7 @@ function App() {
         endIdx = separatorIdx
       }
 
-      const content = remaining.substring(startIdx, endIdx).trim()
+      const content = remaining.substring(startIdx, endIdx).trim().replace(/\*\*/g, '')
       sections.push({ header, content })
     }
 
@@ -312,6 +393,8 @@ function App() {
     )
   }
 
+  const showSuggestions = !result && !loading && !error
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-3xl mx-auto px-4 py-12">
@@ -324,7 +407,7 @@ function App() {
           </p>
         </header>
 
-        <form onSubmit={handleSearch} className="mb-8">
+        <form onSubmit={handleSearch} className="mb-4">
           <div className="flex gap-3">
             <input
               type="text"
@@ -344,6 +427,20 @@ function App() {
           </div>
         </form>
 
+        {showSuggestions && (
+          <div className="flex flex-wrap gap-2 mb-8 justify-center">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s.label}
+                onClick={() => handleSuggestion(s)}
+                className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {status && (
           <div className="text-center mb-6">
             <p className="text-gray-500 font-mono text-sm animate-pulse">{status}</p>
@@ -356,16 +453,41 @@ function App() {
           </div>
         )}
 
-        {result && (
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
-            {vehicleInfo && (
-              <div className="mb-6 pb-4 border-b border-gray-800">
+        {vehicleInfo && (result || loading) && (
+          <>
+            {/* Vehicle header with image */}
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-4 flex items-center gap-5">
+              {!imageError && (
+                <img
+                  src={getCarImageUrl(vehicleInfo.make, vehicleInfo.model, vehicleInfo.year)}
+                  alt={`${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}`}
+                  className="w-48 h-28 object-contain shrink-0"
+                  onError={() => setImageError(true)}
+                />
+              )}
+              <div>
                 <span className="font-mono text-xs tracking-widest text-gray-500">SAFETY BRIEF</span>
-                <h2 className="text-xl text-white font-mono mt-1">
+                <h2 className="text-2xl text-white font-mono mt-1">
                   {vehicleInfo.year} {vehicleInfo.make.toUpperCase()} {vehicleInfo.model.toUpperCase()}
                 </h2>
+                {nhtsaSummary && (
+                  <p className="text-gray-500 text-xs mt-2 font-mono">
+                    {nhtsaSummary.recalls.total} recalls &middot; {nhtsaSummary.complaints.total} complaints
+                  </p>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Stats bar */}
+            {nhtsaSummary && <StatsBar complaints={nhtsaSummary.complaints} />}
+
+            {/* Complaint breakdown chart */}
+            {nhtsaSummary && <ComplaintChart topComponents={nhtsaSummary.complaints.topComponents} />}
+          </>
+        )}
+
+        {result && (
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
             {renderResult(result)}
           </div>
         )}
