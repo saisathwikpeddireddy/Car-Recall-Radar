@@ -18,6 +18,23 @@ const FOLLOW_UP_SUGGESTIONS = [
   'What should I check before buying?',
 ]
 
+function parseVehicleInput(input) {
+  const trimmed = input.trim()
+  const yearMatch = trimmed.match(/\b(19|20)\d{2}\b/)
+  if (!yearMatch) return null
+
+  const year = yearMatch[0]
+  const rest = trimmed.replace(year, '').trim()
+  const words = rest.split(/\s+/).filter(Boolean)
+
+  if (words.length < 2) return null
+
+  const make = words[0].toLowerCase()
+  const model = words.slice(1).join(' ').toLowerCase().replace(/[^a-z0-9\s-]/g, '')
+
+  return { year, make, model }
+}
+
 function getCarImageUrl(make, model, year) {
   const cleanModel = model.replace(/\s+/g, '-')
   return `https://cdn.imagin.studio/getimage?customer=hrjavascript-mastery&make=${make}&modelFamily=${cleanModel}&modelYear=${year}&angle=9`
@@ -82,8 +99,8 @@ function summarizeNHTSAData(nhtsaData) {
 
   const yearlyComplaints = {}
   complaints.forEach((c) => {
-    const year = c.dateComplaintFiled?.split('/')[2]
-    if (year) yearlyComplaints[year] = (yearlyComplaints[year] || 0) + 1
+    const yr = c.dateComplaintFiled?.split('/')[2]
+    if (yr) yearlyComplaints[yr] = (yearlyComplaints[yr] || 0) + 1
   })
 
   return {
@@ -227,13 +244,10 @@ function renderSections(text, sentimentColor, sentiment) {
 }
 
 function App() {
-  const [make, setMake] = useState('')
-  const [model, setModel] = useState('')
-  const [year, setYear] = useState('')
+  const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
   const [mainResult, setMainResult] = useState('')
-  const [followUpThread, setFollowUpThread] = useState([]) // { question, answer }
-  const [currentFollowUpAnswer, setCurrentFollowUpAnswer] = useState('')
+  const [followUpThread, setFollowUpThread] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [followUp, setFollowUp] = useState('')
@@ -242,7 +256,7 @@ function App() {
   const [nhtsaSummary, setNhtsaSummary] = useState(null)
   const [imageError, setImageError] = useState(false)
   const [searchHistory, setSearchHistory] = useState([])
-  const [activeView, setActiveView] = useState('home') // 'home' | 'results'
+  const [activeView, setActiveView] = useState('home')
   const conversationRef = useRef([])
 
   async function streamClaude(messages, onChunk) {
@@ -271,7 +285,6 @@ function App() {
     setError('')
     setMainResult('')
     setFollowUpThread([])
-    setCurrentFollowUpAnswer('')
     setShowFollowUp(false)
     setNhtsaSummary(null)
     setImageError(false)
@@ -315,7 +328,6 @@ function App() {
       conversationRef.current.push({ role: 'assistant', content: fullText })
       setShowFollowUp(true)
 
-      // Cache this search
       const searchKey = `${parsed.year} ${parsed.make} ${parsed.model}`
       setSearchHistory((prev) => {
         const exists = prev.find((s) => s.key === searchKey)
@@ -335,30 +347,19 @@ function App() {
 
   function handleSearch(e) {
     e.preventDefault()
-    if (loading) return
+    if (!query.trim() || loading) return
 
-    const parsedMake = make.trim().toLowerCase()
-    const parsedModel = model.trim().toLowerCase()
-    const parsedYear = year.trim()
-
-    if (!parsedMake || !parsedModel) {
-      setError('Please enter at least a make and model.')
+    const parsed = parseVehicleInput(query)
+    if (!parsed) {
+      setError('Please include a year, make, and model (e.g. "2019 Honda CR-V"). NHTSA requires a specific model year.')
       return
     }
-
-    if (parsedYear && !/^(19|20)\d{2}$/.test(parsedYear)) {
-      setError('Please enter a valid year (e.g. 2019).')
-      return
-    }
-
-    runSearch({ year: parsedYear || '2023', make: parsedMake, model: parsedModel })
+    runSearch(parsed)
   }
 
   function handleSuggestion(s) {
     if (loading) return
-    setMake(s.make)
-    setModel(s.model)
-    setYear(s.year)
+    setQuery(s.label)
     runSearch({ year: s.year, make: s.make, model: s.model })
   }
 
@@ -367,31 +368,25 @@ function App() {
     setNhtsaSummary(entry.summary)
     setMainResult(entry.result)
     setFollowUpThread([])
-    setCurrentFollowUpAnswer('')
     setShowFollowUp(true)
     setError('')
     setImageError(false)
     setActiveView('results')
     conversationRef.current = [...entry.conversation]
-    setMake(entry.parsed.make)
-    setModel(entry.parsed.model)
-    setYear(entry.parsed.year)
+    setQuery(`${entry.parsed.year} ${entry.parsed.make} ${entry.parsed.model}`)
   }
 
   function goHome() {
     setActiveView('home')
     setMainResult('')
     setFollowUpThread([])
-    setCurrentFollowUpAnswer('')
     setShowFollowUp(false)
     setVehicleInfo(null)
     setNhtsaSummary(null)
     setError('')
     setStatus('')
     setImageError(false)
-    setMake('')
-    setModel('')
-    setYear('')
+    setQuery('')
   }
 
   async function submitFollowUp(question) {
@@ -402,7 +397,6 @@ function App() {
     setFollowUp('')
 
     conversationRef.current.push({ role: 'user', content: question })
-    setCurrentFollowUpAnswer('')
 
     const threadIdx = followUpThread.length
     setFollowUpThread((prev) => [...prev, { question, answer: '' }])
@@ -418,7 +412,6 @@ function App() {
       })
       conversationRef.current.push({ role: 'assistant', content: fullText })
 
-      // Update cache
       const searchKey = vehicleInfo ? `${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}` : null
       if (searchKey) {
         setSearchHistory((prev) =>
@@ -444,10 +437,6 @@ function App() {
     submitFollowUp(followUp)
   }
 
-  function handleFollowUpSuggestion(q) {
-    submitFollowUp(q)
-  }
-
   const sentiment = mainResult ? inferSentiment(mainResult) : null
   const sentimentColor = {
     green: 'border-emerald-500',
@@ -460,7 +449,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        {/* Header */}
         <header className="mb-8 text-center">
           <button onClick={goHome} className="inline-block">
             <h1 className="font-mono text-4xl font-bold tracking-tight text-white mb-2 hover:text-gray-300 transition-colors">
@@ -472,31 +460,13 @@ function App() {
           </p>
         </header>
 
-        {/* Search form */}
         <form onSubmit={handleSearch} className="mb-4">
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <input
               type="text"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              placeholder="Year"
-              className="w-24 bg-gray-900 border border-gray-700 rounded-lg px-3 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm text-center"
-              disabled={loading}
-              maxLength={4}
-            />
-            <input
-              type="text"
-              value={make}
-              onChange={(e) => setMake(e.target.value)}
-              placeholder="Make (e.g. Honda)"
-              className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
-              disabled={loading}
-            />
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="Model (e.g. CR-V)"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Try: 2017 Ford F-150 or 2019 Honda CR-V"
               className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
               disabled={loading}
             />
@@ -508,14 +478,9 @@ function App() {
               SCAN
             </button>
           </div>
-          {!year && isHome && (
-            <p className="text-gray-600 text-xs mt-2 text-center font-mono">
-              Year is optional — leave blank to default to 2023
-            </p>
-          )}
         </form>
 
-        {/* Home view: suggestions + history */}
+        {/* Home: suggestions + history */}
         {isHome && !loading && (
           <>
             <div className="flex flex-wrap gap-2 mb-8 justify-center">
@@ -549,24 +514,20 @@ function App() {
           </>
         )}
 
-        {/* Status */}
         {status && (
           <div className="text-center mb-6">
             <p className="text-gray-500 font-mono text-sm animate-pulse">{status}</p>
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 mb-6">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
-        {/* Results view */}
         {vehicleInfo && activeView === 'results' && (mainResult || loading) && (
           <>
-            {/* Vehicle header with image */}
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-4 flex items-center gap-5">
               {!imageError && (
                 <img
@@ -589,22 +550,17 @@ function App() {
               </div>
             </div>
 
-            {/* Stats bar */}
             {nhtsaSummary && <StatsBar complaints={nhtsaSummary.complaints} />}
-
-            {/* Complaint breakdown chart */}
             {nhtsaSummary && <ComplaintChart topComponents={nhtsaSummary.complaints.topComponents} />}
           </>
         )}
 
-        {/* Main result */}
         {mainResult && activeView === 'results' && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
             {renderSections(mainResult, sentimentColor, sentiment)}
           </div>
         )}
 
-        {/* Follow-up thread */}
         {followUpThread.length > 0 && activeView === 'results' && (
           <div className="space-y-4 mb-6">
             {followUpThread.map((item, idx) => (
@@ -623,14 +579,13 @@ function App() {
           </div>
         )}
 
-        {/* Follow-up input + suggestions */}
         {showFollowUp && activeView === 'results' && (
           <>
             <div className="flex flex-wrap gap-2 mb-3 justify-center">
               {FOLLOW_UP_SUGGESTIONS.map((q) => (
                 <button
                   key={q}
-                  onClick={() => handleFollowUpSuggestion(q)}
+                  onClick={() => submitFollowUp(q)}
                   disabled={loading}
                   className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
                 >
