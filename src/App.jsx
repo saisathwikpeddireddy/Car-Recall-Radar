@@ -50,6 +50,42 @@ async function fetchBenchmark(year, make, model) {
   return results.filter(Boolean)
 }
 
+function isVIN(input) {
+  const cleaned = input.trim().replace(/[^A-HJ-NPR-Z0-9]/gi, '')
+  return cleaned.length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)
+}
+
+async function fetchVINData(vin) {
+  const [decodeRes, recallsRes] = await Promise.all([
+    fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`),
+    fetch(`${NHTSA_BASE}/recalls/recallsByVehicle?vin=${vin}`),
+  ])
+
+  const [decode, recalls] = await Promise.all([decodeRes.json(), recallsRes.json()])
+  const info = decode?.Results?.[0] || {}
+
+  const year = info.ModelYear || ''
+  const make = (info.Make || '').toLowerCase()
+  const model = (info.Model || '').toLowerCase()
+
+  // Also fetch complaints by decoded make/model/year
+  let complaints = { results: [], count: 0 }
+  if (year && make && model) {
+    try {
+      const complaintsRes = await fetch(`${NHTSA_BASE}/complaints/complaintsByVehicle?make=${make}&model=${model}&modelYear=${year}`)
+      complaints = await complaintsRes.json()
+    } catch {}
+  }
+
+  return {
+    vin,
+    decoded: { year, make, model, trim: info.Trim || '', bodyClass: info.BodyClass || '', plantCountry: info.PlantCountry || '' },
+    recalls,
+    complaints,
+    models: { results: [{ vehicleModel: model }] },
+  }
+}
+
 function parseVehicleInput(input) {
   const trimmed = input.trim()
   const yearMatch = trimmed.match(/\b(19|20)\d{2}\b/)
@@ -512,13 +548,81 @@ function App() {
     setStatus('')
   }
 
+  async function runVINSearch(vin) {
+    setError('')
+    setMainResult('')
+    setFollowUpThread([])
+    setShowFollowUp(false)
+    setNhtsaSummary(null)
+    setBenchmarks(null)
+    setContextualSuggestions([])
+    setImageError(false)
+    setLoading(true)
+    setActiveView('results')
+    setStatus('Decoding VIN...')
+
+    let vinData
+    try {
+      vinData = await fetchVINData(vin)
+    } catch {
+      setError('Failed to decode VIN. Please check the VIN and try again.')
+      setLoading(false)
+      setStatus('')
+      return
+    }
+
+    const { decoded } = vinData
+    if (!decoded.year || !decoded.make || !decoded.model) {
+      setError('Could not decode this VIN. Please check that it\'s correct or try searching by year, make, and model instead.')
+      setLoading(false)
+      setStatus('')
+      return
+    }
+
+    setVehicleInfo({ year: decoded.year, make: decoded.make, model: decoded.model, vin, trim: decoded.trim, bodyClass: decoded.bodyClass })
+
+    const nhtsaData = { recalls: vinData.recalls, complaints: vinData.complaints, models: vinData.models }
+    const summary = summarizeNHTSAData(nhtsaData)
+    setNhtsaSummary(summary)
+    setStatus('Generating safety brief...')
+
+    const userMessage = `Here is the NHTSA federal safety data for a ${decoded.year} ${decoded.make} ${decoded.model} (VIN: ${vin}):\n\n${JSON.stringify(summary, null, 2)}\n\nThis is a VIN-specific lookup. The recall data is specific to this exact vehicle. Note which recalls apply to this VIN.`
+    conversationRef.current = [{ role: 'user', content: userMessage }]
+
+    try {
+      const fullText = await streamClaude(conversationRef.current, (text) => setMainResult(text))
+      conversationRef.current.push({ role: 'assistant', content: fullText })
+      setShowFollowUp(true)
+
+      fetchBenchmark(decoded.year, decoded.make, decoded.model).then((b) => setBenchmarks(b)).catch(() => {})
+      fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicle: `${decoded.year} ${decoded.make} ${decoded.model}`, verdict: fullText.substring(fullText.indexOf('VERDICT'), fullText.length).substring(0, 300) }),
+      })
+        .then((r) => r.json())
+        .then((suggestions) => { if (Array.isArray(suggestions)) setContextualSuggestions(suggestions.slice(0, 4)) })
+        .catch(() => {})
+    } catch {
+      setError('Failed to generate safety brief. Please try again.')
+    }
+
+    setLoading(false)
+    setStatus('')
+  }
+
   function handleSearch(e) {
     e.preventDefault()
     if (!query.trim() || loading) return
 
+    if (isVIN(query)) {
+      runVINSearch(query.trim().toUpperCase())
+      return
+    }
+
     const parsed = parseVehicleInput(query)
     if (!parsed) {
-      setError('Please include a year, make, and model (e.g. "2019 Honda CR-V"). NHTSA requires a specific model year.')
+      setError('Enter a year, make & model (e.g. "2019 Honda CR-V") or a 17-character VIN.')
       return
     }
     runSearch(parsed)
@@ -647,7 +751,7 @@ function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. 2019 Honda CR-V"
+              placeholder="e.g. 2019 Honda CR-V or enter a VIN"
               className="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 font-mono text-sm transition-colors"
               disabled={loading}
             />
@@ -735,6 +839,9 @@ function App() {
                   <h2 className="text-xl sm:text-2xl text-white font-mono mt-1 truncate">
                     {vehicleInfo.year} {vehicleInfo.make.toUpperCase()} {vehicleInfo.model.toUpperCase()}
                   </h2>
+                  {vehicleInfo.vin && (
+                    <p className="text-gray-500 text-[10px] mt-1 font-mono tracking-wide">VIN: {vehicleInfo.vin}</p>
+                  )}
                   {nhtsaSummary && (
                     <p className="text-gray-400 text-xs mt-2 font-mono">
                       {nhtsaSummary.recalls.total} recalls &middot; {nhtsaSummary.complaints.total} complaints
