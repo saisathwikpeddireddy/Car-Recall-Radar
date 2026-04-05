@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 const NHTSA_BASE = 'https://api.nhtsa.gov'
 
@@ -333,6 +333,36 @@ function BenchmarkBar({ vehicleInfo, nhtsaSummary, benchmarks }) {
   )
 }
 
+function AdUnit({ slot, format = 'auto', className = '' }) {
+  const adRef = useRef(null)
+  const pushed = useRef(false)
+
+  useEffect(() => {
+    if (adRef.current && !pushed.current) {
+      try {
+        ;(window.adsbygoogle = window.adsbygoogle || []).push({})
+        pushed.current = true
+      } catch {
+        // AdSense not loaded or blocked
+      }
+    }
+  }, [])
+
+  return (
+    <div className={`ad-container my-4 text-center ${className}`}>
+      <ins
+        className="adsbygoogle"
+        style={{ display: 'block' }}
+        data-ad-client="ca-pub-XXXXXXXXXX"
+        data-ad-slot={slot}
+        data-ad-format={format}
+        data-full-width-responsive="true"
+        ref={adRef}
+      />
+    </div>
+  )
+}
+
 function App() {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
@@ -604,6 +634,8 @@ function App() {
               ))}
             </div>
 
+            <AdUnit slot="1234567890" format="horizontal" className="mt-4" />
+
             {searchHistory.length > 0 && (
               <div className="mb-8">
                 <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-3 text-center">RECENT SEARCHES</h3>
@@ -679,6 +711,8 @@ function App() {
           </div>
         )}
 
+        {mainResult && activeView === 'results' && <AdUnit slot="0987654321" format="horizontal" />}
+
         {followUpThread.length > 0 && activeView === 'results' && (
           <div className="space-y-4 mb-6">
             {followUpThread.map((item, idx) => (
@@ -735,9 +769,12 @@ function App() {
           </>
         )}
 
-        <footer className="text-center mt-16">
+        <footer className="text-center mt-16 space-y-2">
           <p className="text-gray-700 text-xs font-mono">
             Data sourced from NHTSA — National Highway Traffic Safety Administration
+          </p>
+          <p className="text-gray-800 text-xs">
+            Free car recall lookup &middot; Used car safety check &middot; Vehicle complaint search
           </p>
         </footer>
       </div>
