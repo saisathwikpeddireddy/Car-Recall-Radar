@@ -11,22 +11,12 @@ const SUGGESTIONS = [
   { label: '2018 Tesla Model 3', year: '2018', make: 'tesla', model: 'model 3' },
 ]
 
-function parseVehicleInput(input) {
-  const trimmed = input.trim()
-  const yearMatch = trimmed.match(/\b(19|20)\d{2}\b/)
-  if (!yearMatch) return null
-
-  const year = yearMatch[0]
-  const rest = trimmed.replace(year, '').trim()
-  const words = rest.split(/\s+/).filter(Boolean)
-
-  if (words.length < 2) return null
-
-  const make = words[0].toLowerCase()
-  const model = words.slice(1).join(' ').toLowerCase().replace(/[^a-z0-9\s-]/g, '')
-
-  return { year, make, model }
-}
+const FOLLOW_UP_SUGGESTIONS = [
+  'What are the most dangerous recalls?',
+  'Should I worry about the airbag issues?',
+  'How does this compare to similar vehicles?',
+  'What should I check before buying?',
+]
 
 function getCarImageUrl(make, model, year) {
   const cleanModel = model.replace(/\s+/g, '-')
@@ -90,7 +80,6 @@ function summarizeNHTSAData(nhtsaData) {
     fire: c.fire,
   }))
 
-  // Build yearly complaint trend
   const yearlyComplaints = {}
   complaints.forEach((c) => {
     const year = c.dateComplaintFiled?.split('/')[2]
@@ -196,10 +185,55 @@ function StatsBar({ complaints }) {
   )
 }
 
+function renderSections(text, sentimentColor, sentiment) {
+  const sections = []
+  const sectionHeaders = ['RECALLS', 'COMPLAINTS', 'INVESTIGATIONS', 'VERDICT']
+  const remaining = text
+
+  for (let i = 0; i < sectionHeaders.length; i++) {
+    const header = sectionHeaders[i]
+    const nextHeader = sectionHeaders[i + 1]
+    const headerIdx = remaining.indexOf(header)
+    if (headerIdx === -1) continue
+
+    const startIdx = headerIdx + header.length
+    let endIdx = remaining.length
+    if (nextHeader) {
+      const nextIdx = remaining.indexOf(nextHeader, startIdx)
+      if (nextIdx !== -1) endIdx = nextIdx
+    }
+
+    const content = remaining.substring(startIdx, endIdx).trim().replace(/\*\*/g, '')
+    sections.push({ header, content })
+  }
+
+  if (sections.length === 0) {
+    return <p className="text-gray-300 whitespace-pre-wrap">{text}</p>
+  }
+
+  return sections.map(({ header, content }) => (
+    <div
+      key={header}
+      className={`mb-6 ${header === 'VERDICT' ? `pl-4 border-l-4 ${sentimentColor[sentiment] || 'border-gray-500'}` : ''}`}
+    >
+      <h3 className="font-mono text-sm tracking-widest text-gray-400 mb-2">{header}</h3>
+      {header === 'VERDICT' ? (
+        <p className="text-lg text-gray-100 whitespace-pre-wrap">{content}</p>
+      ) : (
+        <p className="text-gray-300 whitespace-pre-wrap">{content}</p>
+      )}
+    </div>
+  ))
+}
+
 function App() {
-  const [query, setQuery] = useState('')
+  const [make, setMake] = useState('')
+  const [model, setModel] = useState('')
+  const [year, setYear] = useState('')
   const [status, setStatus] = useState('')
-  const [result, setResult] = useState('')
+  const [mainResult, setMainResult] = useState('')
+  const [followUpThread, setFollowUpThread] = useState([]) // { question, answer }
+  const [currentFollowUpAnswer, setCurrentFollowUpAnswer] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [followUp, setFollowUp] = useState('')
@@ -207,6 +241,8 @@ function App() {
   const [vehicleInfo, setVehicleInfo] = useState(null)
   const [nhtsaSummary, setNhtsaSummary] = useState(null)
   const [imageError, setImageError] = useState(false)
+  const [searchHistory, setSearchHistory] = useState([])
+  const [activeView, setActiveView] = useState('home') // 'home' | 'results'
   const conversationRef = useRef([])
 
   async function streamClaude(messages, onChunk) {
@@ -233,12 +269,15 @@ function App() {
 
   async function runSearch(parsed) {
     setError('')
-    setResult('')
+    setMainResult('')
+    setFollowUpThread([])
+    setCurrentFollowUpAnswer('')
     setShowFollowUp(false)
     setNhtsaSummary(null)
     setImageError(false)
     setLoading(true)
     setVehicleInfo(parsed)
+    setActiveView('results')
     setStatus('Scanning federal database...')
 
     let nhtsaData
@@ -272,9 +311,20 @@ function App() {
     conversationRef.current = [{ role: 'user', content: userMessage }]
 
     try {
-      const fullText = await streamClaude(conversationRef.current, (text) => setResult(text))
+      const fullText = await streamClaude(conversationRef.current, (text) => setMainResult(text))
       conversationRef.current.push({ role: 'assistant', content: fullText })
       setShowFollowUp(true)
+
+      // Cache this search
+      const searchKey = `${parsed.year} ${parsed.make} ${parsed.model}`
+      setSearchHistory((prev) => {
+        const exists = prev.find((s) => s.key === searchKey)
+        if (exists) return prev
+        return [
+          { key: searchKey, parsed, summary, result: fullText, conversation: [...conversationRef.current] },
+          ...prev,
+        ].slice(0, 10)
+      })
     } catch {
       setError('Failed to generate safety brief. Please try again.')
     }
@@ -283,137 +333,170 @@ function App() {
     setStatus('')
   }
 
-  async function handleSearch(e) {
+  function handleSearch(e) {
     e.preventDefault()
-    if (!query.trim() || loading) return
+    if (loading) return
 
-    const parsed = parseVehicleInput(query)
-    if (!parsed) {
-      setError('Could not parse vehicle info. Please enter a year, make, and model (e.g. "2019 Honda CR-V").')
+    const parsedMake = make.trim().toLowerCase()
+    const parsedModel = model.trim().toLowerCase()
+    const parsedYear = year.trim()
+
+    if (!parsedMake || !parsedModel) {
+      setError('Please enter at least a make and model.')
       return
     }
-    runSearch(parsed)
+
+    if (parsedYear && !/^(19|20)\d{2}$/.test(parsedYear)) {
+      setError('Please enter a valid year (e.g. 2019).')
+      return
+    }
+
+    runSearch({ year: parsedYear || '2023', make: parsedMake, model: parsedModel })
   }
 
   function handleSuggestion(s) {
     if (loading) return
-    setQuery(s.label)
+    setMake(s.make)
+    setModel(s.model)
+    setYear(s.year)
     runSearch({ year: s.year, make: s.make, model: s.model })
   }
 
-  async function handleFollowUp(e) {
-    e.preventDefault()
-    if (!followUp.trim() || loading) return
+  function loadFromHistory(entry) {
+    setVehicleInfo(entry.parsed)
+    setNhtsaSummary(entry.summary)
+    setMainResult(entry.result)
+    setFollowUpThread([])
+    setCurrentFollowUpAnswer('')
+    setShowFollowUp(true)
+    setError('')
+    setImageError(false)
+    setActiveView('results')
+    conversationRef.current = [...entry.conversation]
+    setMake(entry.parsed.make)
+    setModel(entry.parsed.model)
+    setYear(entry.parsed.year)
+  }
+
+  function goHome() {
+    setActiveView('home')
+    setMainResult('')
+    setFollowUpThread([])
+    setCurrentFollowUpAnswer('')
+    setShowFollowUp(false)
+    setVehicleInfo(null)
+    setNhtsaSummary(null)
+    setError('')
+    setStatus('')
+    setImageError(false)
+    setMake('')
+    setModel('')
+    setYear('')
+  }
+
+  async function submitFollowUp(question) {
+    if (!question.trim() || loading) return
 
     setLoading(true)
     setStatus('Thinking...')
+    setFollowUp('')
 
-    conversationRef.current.push({ role: 'user', content: followUp })
-    const prevResult = result
+    conversationRef.current.push({ role: 'user', content: question })
+    setCurrentFollowUpAnswer('')
+
+    const threadIdx = followUpThread.length
+    setFollowUpThread((prev) => [...prev, { question, answer: '' }])
 
     try {
       const fullText = await streamClaude(conversationRef.current, (text) => {
-        setResult(prevResult + '\n\n---\n\n' + text)
+        const cleaned = text.replace(/\*\*/g, '')
+        setFollowUpThread((prev) => {
+          const updated = [...prev]
+          updated[threadIdx] = { question, answer: cleaned }
+          return updated
+        })
       })
       conversationRef.current.push({ role: 'assistant', content: fullText })
+
+      // Update cache
+      const searchKey = vehicleInfo ? `${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}` : null
+      if (searchKey) {
+        setSearchHistory((prev) =>
+          prev.map((s) =>
+            s.key === searchKey ? { ...s, conversation: [...conversationRef.current] } : s
+          )
+        )
+      }
     } catch {
-      setError('Failed to get follow-up response. Please try again.')
+      setFollowUpThread((prev) => {
+        const updated = [...prev]
+        updated[threadIdx] = { question, answer: 'Failed to get response. Please try again.' }
+        return updated
+      })
     }
 
-    setFollowUp('')
     setLoading(false)
     setStatus('')
   }
 
-  const sentiment = result ? inferSentiment(result) : null
+  function handleFollowUp(e) {
+    e.preventDefault()
+    submitFollowUp(followUp)
+  }
+
+  function handleFollowUpSuggestion(q) {
+    submitFollowUp(q)
+  }
+
+  const sentiment = mainResult ? inferSentiment(mainResult) : null
   const sentimentColor = {
     green: 'border-emerald-500',
     yellow: 'border-amber-500',
     red: 'border-red-500',
   }
 
-  function renderResult(text) {
-    const sections = []
-    const sectionHeaders = ['RECALLS', 'COMPLAINTS', 'INVESTIGATIONS', 'VERDICT']
-    let remaining = text
-
-    for (let i = 0; i < sectionHeaders.length; i++) {
-      const header = sectionHeaders[i]
-      const nextHeader = sectionHeaders[i + 1]
-      const headerIdx = remaining.indexOf(header)
-      if (headerIdx === -1) continue
-
-      const startIdx = headerIdx + header.length
-      let endIdx = remaining.length
-      if (nextHeader) {
-        const nextIdx = remaining.indexOf(nextHeader, startIdx)
-        if (nextIdx !== -1) endIdx = nextIdx
-      }
-
-      const separatorIdx = remaining.indexOf('---', startIdx)
-      if (separatorIdx !== -1 && separatorIdx < endIdx) {
-        endIdx = separatorIdx
-      }
-
-      const content = remaining.substring(startIdx, endIdx).trim().replace(/\*\*/g, '')
-      sections.push({ header, content })
-    }
-
-    const separatorIdx = text.indexOf('---')
-    let followUpContent = null
-    if (separatorIdx !== -1) {
-      followUpContent = text.substring(separatorIdx + 3).trim()
-    }
-
-    if (sections.length === 0) {
-      return <p className="text-gray-300 whitespace-pre-wrap">{text}</p>
-    }
-
-    return (
-      <>
-        {sections.map(({ header, content }) => (
-          <div
-            key={header}
-            className={`mb-6 ${header === 'VERDICT' ? `pl-4 border-l-4 ${sentimentColor[sentiment] || 'border-gray-500'}` : ''}`}
-          >
-            <h3 className="font-mono text-sm tracking-widest text-gray-400 mb-2">{header}</h3>
-            {header === 'VERDICT' ? (
-              <p className="text-lg text-gray-100 whitespace-pre-wrap">{content}</p>
-            ) : (
-              <p className="text-gray-300 whitespace-pre-wrap">{content}</p>
-            )}
-          </div>
-        ))}
-        {followUpContent && (
-          <div className="mt-6 pt-6 border-t border-gray-700">
-            <p className="text-gray-300 whitespace-pre-wrap">{followUpContent}</p>
-          </div>
-        )}
-      </>
-    )
-  }
-
-  const showSuggestions = !result && !loading && !error
+  const isHome = activeView === 'home'
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        <header className="mb-12 text-center">
-          <h1 className="font-mono text-4xl font-bold tracking-tight text-white mb-2">
-            Car Recall Radar
-          </h1>
+        {/* Header */}
+        <header className="mb-8 text-center">
+          <button onClick={goHome} className="inline-block">
+            <h1 className="font-mono text-4xl font-bold tracking-tight text-white mb-2 hover:text-gray-300 transition-colors">
+              Car Recall Radar
+            </h1>
+          </button>
           <p className="text-gray-500 text-sm tracking-wide">
             Federal safety data, in plain English.
           </p>
         </header>
 
+        {/* Search form */}
         <form onSubmit={handleSearch} className="mb-4">
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <input
               type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Try: 2017 Ford F-150 or 2019 Honda CR-V"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              placeholder="Year"
+              className="w-24 bg-gray-900 border border-gray-700 rounded-lg px-3 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm text-center"
+              disabled={loading}
+              maxLength={4}
+            />
+            <input
+              type="text"
+              value={make}
+              onChange={(e) => setMake(e.target.value)}
+              placeholder="Make (e.g. Honda)"
+              className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
+              disabled={loading}
+            />
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="Model (e.g. CR-V)"
               className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
               disabled={loading}
             />
@@ -425,35 +508,63 @@ function App() {
               SCAN
             </button>
           </div>
+          {!year && isHome && (
+            <p className="text-gray-600 text-xs mt-2 text-center font-mono">
+              Year is optional — leave blank to default to 2023
+            </p>
+          )}
         </form>
 
-        {showSuggestions && (
-          <div className="flex flex-wrap gap-2 mb-8 justify-center">
-            {SUGGESTIONS.map((s) => (
-              <button
-                key={s.label}
-                onClick={() => handleSuggestion(s)}
-                className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors"
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+        {/* Home view: suggestions + history */}
+        {isHome && !loading && (
+          <>
+            <div className="flex flex-wrap gap-2 mb-8 justify-center">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s.label}
+                  onClick={() => handleSuggestion(s)}
+                  className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {searchHistory.length > 0 && (
+              <div className="mb-8">
+                <h3 className="font-mono text-xs tracking-widest text-gray-500 mb-3 text-center">RECENT SEARCHES</h3>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {searchHistory.map((entry) => (
+                    <button
+                      key={entry.key}
+                      onClick={() => loadFromHistory(entry)}
+                      className="text-xs text-gray-400 hover:text-gray-200 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-600 rounded-lg px-3 py-2 transition-colors font-mono"
+                    >
+                      {entry.parsed.year} {entry.parsed.make.toUpperCase()} {entry.parsed.model.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
+        {/* Status */}
         {status && (
           <div className="text-center mb-6">
             <p className="text-gray-500 font-mono text-sm animate-pulse">{status}</p>
           </div>
         )}
 
+        {/* Error */}
         {error && (
           <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 mb-6">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
-        {vehicleInfo && (result || loading) && (
+        {/* Results view */}
+        {vehicleInfo && activeView === 'results' && (mainResult || loading) && (
           <>
             {/* Vehicle header with image */}
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 mb-4 flex items-center gap-5">
@@ -486,32 +597,67 @@ function App() {
           </>
         )}
 
-        {result && (
+        {/* Main result */}
+        {mainResult && activeView === 'results' && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
-            {renderResult(result)}
+            {renderSections(mainResult, sentimentColor, sentiment)}
           </div>
         )}
 
-        {showFollowUp && (
-          <form onSubmit={handleFollowUp} className="mb-8">
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
-                placeholder="Ask a follow-up question about this vehicle..."
-                className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                disabled={loading || !followUp.trim()}
-                className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-600 text-gray-200 px-5 py-3 rounded-lg text-sm transition-colors"
-              >
-                Ask
-              </button>
+        {/* Follow-up thread */}
+        {followUpThread.length > 0 && activeView === 'results' && (
+          <div className="space-y-4 mb-6">
+            {followUpThread.map((item, idx) => (
+              <div key={idx}>
+                <div className="flex items-start gap-3 mb-2">
+                  <span className="font-mono text-xs text-gray-500 bg-gray-800 rounded px-2 py-1 shrink-0 mt-0.5">Q</span>
+                  <p className="text-gray-300 text-sm">{item.question}</p>
+                </div>
+                {item.answer && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 ml-8">
+                    <p className="text-gray-300 whitespace-pre-wrap text-sm">{item.answer}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Follow-up input + suggestions */}
+        {showFollowUp && activeView === 'results' && (
+          <>
+            <div className="flex flex-wrap gap-2 mb-3 justify-center">
+              {FOLLOW_UP_SUGGESTIONS.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => handleFollowUpSuggestion(q)}
+                  disabled={loading}
+                  className="text-xs text-gray-500 hover:text-gray-300 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
+                >
+                  {q}
+                </button>
+              ))}
             </div>
-          </form>
+            <form onSubmit={handleFollowUp} className="mb-8">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={followUp}
+                  onChange={(e) => setFollowUp(e.target.value)}
+                  placeholder="Ask a follow-up question about this vehicle..."
+                  className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !followUp.trim()}
+                  className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-600 text-gray-200 px-5 py-3 rounded-lg text-sm transition-colors"
+                >
+                  Ask
+                </button>
+              </div>
+            </form>
+          </>
         )}
 
         <footer className="text-center mt-16">
