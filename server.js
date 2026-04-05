@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createServer } from 'http'
-import { readFileSync } from 'fs'
+import 'dotenv/config'
 
-const client = new Anthropic()
+const client = new Anthropic({
+  apiKey: process.env.VITE_ANTHROPIC_API_KEY,
+})
 
 const server = createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/api/chat') {

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 
-const NHTSA_BASE = 'https://api.nhtsa.dot.gov'
+const NHTSA_BASE = 'https://api.nhtsa.gov'
 
 function parseVehicleInput(input) {
   const trimmed = input.trim()
@@ -33,6 +33,70 @@ async function fetchNHTSAData(year, make, model) {
   ])
 
   return { recalls, complaints, models }
+}
+
+function summarizeNHTSAData(nhtsaData) {
+  // Summarize recalls — keep full details since there are typically few
+  const recalls = nhtsaData.recalls?.results || []
+  const recallSummary = recalls.map((r) => ({
+    campaign: r.NHTSACampaignNumber,
+    component: r.Component,
+    summary: r.Summary,
+    consequence: r.Consequence,
+    remedy: r.Remedy,
+    date: r.ReportReceivedDate,
+  }))
+
+  // Summarize complaints — aggregate by component instead of sending all
+  const complaints = nhtsaData.complaints?.results || []
+  const complaintCount = nhtsaData.complaints?.count || complaints.length
+  const componentCounts = {}
+  let crashes = 0
+  let fires = 0
+  let injuries = 0
+  let deaths = 0
+
+  complaints.forEach((c) => {
+    const comp = c.components || 'UNKNOWN'
+    componentCounts[comp] = (componentCounts[comp] || 0) + 1
+    if (c.crash) crashes++
+    if (c.fire) fires++
+    injuries += c.numberOfInjuries || 0
+    deaths += c.numberOfDeaths || 0
+  })
+
+  const topComponents = Object.entries(componentCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([component, count]) => ({ component, count }))
+
+  // Include a sample of recent complaint summaries for context
+  const sampleComplaints = complaints.slice(0, 5).map((c) => ({
+    component: c.components,
+    summary: c.summary?.substring(0, 300),
+    date: c.dateComplaintFiled,
+    crash: c.crash,
+    fire: c.fire,
+  }))
+
+  return {
+    recalls: {
+      total: recalls.length,
+      details: recallSummary,
+    },
+    complaints: {
+      total: complaintCount,
+      crashes,
+      fires,
+      injuries,
+      deaths,
+      topComponents,
+      sampleComplaints,
+    },
+    modelValidation: {
+      modelsFound: (nhtsaData.models?.results || []).map((m) => m.vehicleModel),
+    },
+  }
 }
 
 const SYSTEM_PROMPT = `You are Car Recall Radar, a car safety assistant. You receive raw federal data from NHTSA — the US government's vehicle safety agency — for a specific make, model, and year.
@@ -73,6 +137,28 @@ function App() {
   const [vehicleInfo, setVehicleInfo] = useState(null)
   const conversationRef = useRef([])
 
+  async function streamClaude(messages, onChunk) {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system: SYSTEM_PROMPT, messages }),
+    })
+
+    if (!response.ok) throw new Error('Claude API request failed')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let fullText = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      fullText += decoder.decode(value, { stream: true })
+      onChunk(fullText)
+    }
+    return fullText
+  }
+
   async function handleSearch(e) {
     e.preventDefault()
     if (!query.trim() || loading) return
@@ -102,7 +188,7 @@ function App() {
       return
     }
 
-    const recallCount = nhtsaData.recalls?.results?.length ?? nhtsaData.recalls?.count ?? 0
+    const recallCount = nhtsaData.recalls?.results?.length ?? nhtsaData.recalls?.Count ?? 0
     const complaintCount = nhtsaData.complaints?.results?.length ?? nhtsaData.complaints?.count ?? 0
 
     if (recallCount === 0 && complaintCount === 0) {
@@ -117,34 +203,13 @@ function App() {
 
     setStatus('Generating safety brief...')
 
-    const userMessage = `Here is the raw NHTSA data for a ${parsed.year} ${parsed.make} ${parsed.model}:\n\nRecalls:\n${JSON.stringify(nhtsaData.recalls, null, 2)}\n\nComplaints:\n${JSON.stringify(nhtsaData.complaints, null, 2)}\n\nModel validation:\n${JSON.stringify(nhtsaData.models, null, 2)}`
+    const summary = summarizeNHTSAData(nhtsaData)
+    const userMessage = `Here is the NHTSA federal safety data for a ${parsed.year} ${parsed.make} ${parsed.model}:\n\n${JSON.stringify(summary, null, 2)}`
 
     conversationRef.current = [{ role: 'user', content: userMessage }]
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system: SYSTEM_PROMPT,
-          messages: conversationRef.current,
-        }),
-      })
-
-      if (!response.ok) throw new Error('Claude API request failed')
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        fullText += chunk
-        setResult(fullText)
-      }
-
+      const fullText = await streamClaude(conversationRef.current, (text) => setResult(text))
       conversationRef.current.push({ role: 'assistant', content: fullText })
       setShowFollowUp(true)
     } catch {
@@ -163,31 +228,12 @@ function App() {
     setStatus('Thinking...')
 
     conversationRef.current.push({ role: 'user', content: followUp })
+    const prevResult = result
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system: SYSTEM_PROMPT,
-          messages: conversationRef.current,
-        }),
+      const fullText = await streamClaude(conversationRef.current, (text) => {
+        setResult(prevResult + '\n\n---\n\n' + text)
       })
-
-      if (!response.ok) throw new Error('Claude API request failed')
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        fullText += chunk
-        setResult((prev) => prev + '\n\n---\n\n' + fullText)
-      }
-
       conversationRef.current.push({ role: 'assistant', content: fullText })
     } catch {
       setError('Failed to get follow-up response. Please try again.')
@@ -223,7 +269,6 @@ function App() {
         if (nextIdx !== -1) endIdx = nextIdx
       }
 
-      // Check for follow-up separator
       const separatorIdx = remaining.indexOf('---', startIdx)
       if (separatorIdx !== -1 && separatorIdx < endIdx) {
         endIdx = separatorIdx
@@ -233,7 +278,6 @@ function App() {
       sections.push({ header, content })
     }
 
-    // Extract follow-up content after separator
     const separatorIdx = text.indexOf('---')
     let followUpContent = null
     if (separatorIdx !== -1) {
@@ -271,7 +315,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        {/* Header */}
         <header className="mb-12 text-center">
           <h1 className="font-mono text-4xl font-bold tracking-tight text-white mb-2">
             Car Recall Radar
@@ -281,7 +324,6 @@ function App() {
           </p>
         </header>
 
-        {/* Search */}
         <form onSubmit={handleSearch} className="mb-8">
           <div className="flex gap-3">
             <input
@@ -302,21 +344,18 @@ function App() {
           </div>
         </form>
 
-        {/* Status */}
         {status && (
           <div className="text-center mb-6">
             <p className="text-gray-500 font-mono text-sm animate-pulse">{status}</p>
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 mb-6">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
-        {/* Results */}
         {result && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
             {vehicleInfo && (
@@ -331,7 +370,6 @@ function App() {
           </div>
         )}
 
-        {/* Follow-up */}
         {showFollowUp && (
           <form onSubmit={handleFollowUp} className="mb-8">
             <div className="flex gap-3">
@@ -354,7 +392,6 @@ function App() {
           </form>
         )}
 
-        {/* Footer */}
         <footer className="text-center mt-16">
           <p className="text-gray-700 text-xs font-mono">
             Data sourced from NHTSA — National Highway Traffic Safety Administration
