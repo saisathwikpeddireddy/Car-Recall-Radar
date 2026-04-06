@@ -67,51 +67,6 @@ const server = createServer(async (req, res) => {
         'Is this vehicle safe for daily driving?',
       ]))
     }
-  } else if (req.method === 'POST' && req.url === '/api/extract-vin') {
-    let body = ''
-    for await (const chunk of req) body += chunk
-
-    const { url } = JSON.parse(body)
-
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-
-    try {
-      const pageRes = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CarRecallChecker/1.0)' },
-        redirect: 'follow',
-      })
-      const html = await pageRes.text()
-
-      // Try multiple patterns to find VIN in page content
-      const patterns = [
-        /\bVIN[:\s#]*([A-HJ-NPR-Z0-9]{17})\b/i,
-        /"vin"\s*:\s*"([A-HJ-NPR-Z0-9]{17})"/i,
-        /vehicleIdentificationNumber["\s:]+([A-HJ-NPR-Z0-9]{17})/i,
-        /data-vin="([A-HJ-NPR-Z0-9]{17})"/i,
-        /vehicle\/([A-HJ-NPR-Z0-9]{17})/i,
-      ]
-
-      let vin = null
-      for (const pattern of patterns) {
-        const match = html.match(pattern)
-        if (match) {
-          vin = match[1].toUpperCase()
-          break
-        }
-      }
-
-      // Fallback: find any 17-char VIN-like string in the page
-      if (!vin) {
-        const allVins = html.match(/\b[A-HJ-NPR-Z0-9]{17}\b/gi)
-        if (allVins && allVins.length > 0) {
-          vin = allVins[0].toUpperCase()
-        }
-      }
-
-      res.end(JSON.stringify({ vin }))
-    } catch {
-      res.end(JSON.stringify({ vin: null, error: 'Failed to fetch page' }))
-    }
   } else {
     res.writeHead(404)
     res.end('Not found')

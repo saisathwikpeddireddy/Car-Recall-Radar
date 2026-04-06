@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js & vite",
     "server": "node server.js",
-    "build": "vite build",
+    "build": "vite build && node scripts/generate-seo-pages.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

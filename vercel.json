@@ -6,5 +6,9 @@
     "api/*.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/check/:path*", "destination": "/check/:path*" },
+    { "source": "/((?!api|assets|check|favicon|robots|sitemap).*)", "destination": "/index.html" }
+  ]
 }

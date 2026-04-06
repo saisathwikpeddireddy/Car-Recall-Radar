@@ -57,11 +57,6 @@ function isVIN(input) {
   return cleaned.length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)
 }
 
-function extractVINFromURL(input) {
-  const vinMatch = input.match(/[A-HJ-NPR-Z0-9]{17}/i)
-  return vinMatch ? vinMatch[0].toUpperCase() : null
-}
-
 async function fetchVINData(vin) {
   const [decodeRes, recallsRes] = await Promise.all([
     fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${vin}?format=json`),
@@ -211,15 +206,6 @@ function decodeShareState(hash) {
   } catch {
     return null
   }
-}
-
-function getAffiliateLinks(year, make, model) {
-  const q = encodeURIComponent(`${year} ${make} ${model}`)
-  return [
-    { name: 'Carvana', url: `https://www.carvana.com/cars?search=${q}` },
-    { name: 'CarGurus', url: `https://www.cargurus.com/Cars/inventorylisting/viewDetailsFilterViewInventoryListing.action?searchText=${q}` },
-    { name: 'AutoTrader', url: `https://www.autotrader.com/cars-for-sale/all-cars?makeCodeList=${make.toUpperCase()}&searchRadius=0&modelCodeList=${model.toUpperCase()}&startYear=${year}&endYear=${year}` },
-  ]
 }
 
 const SYSTEM_PROMPT = `You are Car Recall Checker, a car safety assistant. You receive raw federal data from NHTSA — the US government's vehicle safety agency — for a specific make, model, and year.
@@ -551,19 +537,32 @@ function App() {
   const [showShareToast, setShowShareToast] = useState(false)
   const conversationRef = useRef([])
 
-  // Load shared report from URL hash on mount
+  // Load shared report from URL hash on mount, or auto-search from /check/ route
   useEffect(() => {
     const hash = window.location.hash.slice(1)
-    if (!hash || hash.length < 10) return
-    const shared = decodeShareState(hash)
-    if (!shared) return
-    setVehicleInfo(shared.v)
-    setNhtsaSummary(shared.s)
-    setMainResult(shared.r)
-    setBenchmarks(shared.b)
-    setActiveView('results')
-    setShowFollowUp(false)
-    window.history.replaceState(null, '', window.location.pathname)
+    if (hash && hash.length >= 10) {
+      const shared = decodeShareState(hash)
+      if (shared) {
+        setVehicleInfo(shared.v)
+        setNhtsaSummary(shared.s)
+        setMainResult(shared.r)
+        setBenchmarks(shared.b)
+        setActiveView('results')
+        setShowFollowUp(false)
+        window.history.replaceState(null, '', window.location.pathname)
+        return
+      }
+    }
+
+    // Handle /check/2019-honda-cr-v style SEO routes
+    const path = window.location.pathname
+    const checkMatch = path.match(/^\/check\/(\d{4})-([a-z]+)-(.+)$/i)
+    if (checkMatch) {
+      const [, year, make, modelSlug] = checkMatch
+      const model = modelSlug.replace(/-/g, ' ')
+      setQuery(`${year} ${make} ${model}`)
+      runSearch({ year, make: make.toLowerCase(), model: model.toLowerCase() })
+    }
   }, [])
 
   function addToShortlist() {
@@ -770,38 +769,6 @@ function App() {
 
     const input = query.trim()
 
-    // Check if it's a URL — extract VIN from URL text or fetch the page
-    if (input.startsWith('http')) {
-      const vinInUrl = extractVINFromURL(input)
-      if (vinInUrl) {
-        setQuery(vinInUrl)
-        runVINSearch(vinInUrl)
-        return
-      }
-      // VIN not in URL — try scraping the page server-side
-      setLoading(true)
-      setStatus('Extracting VIN from listing...')
-      try {
-        const res = await fetch('/api/extract-vin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: input }),
-        })
-        const { vin } = await res.json()
-        if (vin) {
-          setQuery(vin)
-          setStatus('')
-          setLoading(false)
-          runVINSearch(vin)
-          return
-        }
-      } catch {}
-      setLoading(false)
-      setStatus('')
-      setError('Could not find a VIN in that listing. Try pasting the 17-character VIN directly from the listing page.')
-      return
-    }
-
     if (isVIN(input)) {
       runVINSearch(input.toUpperCase())
       return
@@ -809,7 +776,7 @@ function App() {
 
     const parsed = parseVehicleInput(input)
     if (!parsed) {
-      setError('Enter a year, make & model (e.g. "2019 Honda CR-V"), a VIN, or paste a car listing URL.')
+      setError('Enter a year, make & model (e.g. "2019 Honda CR-V") or a 17-character VIN.')
       return
     }
     runSearch(parsed)
@@ -909,7 +876,6 @@ function App() {
   }
 
   const isHome = activeView === 'home'
-  const affiliateLinks = vehicleInfo ? getAffiliateLinks(vehicleInfo.year, vehicleInfo.make, vehicleInfo.model) : []
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -925,7 +891,7 @@ function App() {
           {isHome && (
             <div className="mt-3">
               <p className="text-gray-500 text-xs mt-2 max-w-md mx-auto leading-relaxed">
-                Look up any used car by name, VIN, or listing URL. See its full NHTSA safety record — recalls, complaints, investigations — in a plain-English verdict.
+                Look up any used car by name or VIN. See its full NHTSA safety record — recalls, complaints, investigations — in a plain-English verdict.
               </p>
             </div>
           )}
@@ -938,7 +904,7 @@ function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Year make model, VIN, or paste a listing URL"
+              placeholder="e.g. 2019 Honda CR-V or enter a VIN"
               className="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 font-mono text-sm transition-colors"
               disabled={loading}
             />
@@ -1094,26 +1060,6 @@ function App() {
                 </svg>
                 PRINT
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* Affiliate links */}
-        {mainResult && activeView === 'results' && vehicleInfo && (
-          <div className="bg-gray-900/50 border border-gray-800/50 rounded-xl p-4 mb-4">
-            <h3 className="font-mono text-[10px] tracking-[0.2em] text-gray-500 mb-3">FIND THIS VEHICLE</h3>
-            <div className="flex flex-wrap gap-2">
-              {affiliateLinks.map(({ name, url }) => (
-                <a
-                  key={name}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-800 border border-gray-700/50 hover:border-gray-600 rounded-lg px-3 py-2 transition-all duration-200 font-mono"
-                >
-                  {name} &rarr;
-                </a>
-              ))}
             </div>
           </div>
         )}
