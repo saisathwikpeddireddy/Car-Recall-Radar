@@ -3,12 +3,12 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 const NHTSA_BASE = 'https://api.nhtsa.gov'
 
 const SUGGESTIONS = [
+  { label: '2023 Ford F-150', year: '2023', make: 'ford', model: 'f-150' },
+  { label: '2022 Tesla Model Y', year: '2022', make: 'tesla', model: 'model y' },
+  { label: '2023 Kia Telluride', year: '2023', make: 'kia', model: 'telluride' },
   { label: '2019 Honda CR-V', year: '2019', make: 'honda', model: 'cr-v' },
-  { label: '2017 Ford F-150', year: '2017', make: 'ford', model: 'f-150' },
-  { label: '2020 Jeep Wrangler', year: '2020', make: 'jeep', model: 'wrangler' },
-  { label: '2019 Kia Soul', year: '2019', make: 'kia', model: 'soul' },
-  { label: '2021 Toyota Camry', year: '2021', make: 'toyota', model: 'camry' },
-  { label: '2018 Tesla Model 3', year: '2018', make: 'tesla', model: 'model 3' },
+  { label: '2021 Toyota RAV4', year: '2021', make: 'toyota', model: 'rav4' },
+  { label: '2020 Chevrolet Silverado', year: '2020', make: 'chevrolet', model: 'silverado 1500' },
 ]
 
 const COMPETITORS = {
@@ -16,7 +16,7 @@ const COMPETITORS = {
   toyota: { camry: [{ make: 'honda', model: 'accord' }, { make: 'nissan', model: 'altima' }], rav4: [{ make: 'honda', model: 'cr-v' }, { make: 'mazda', model: 'cx-5' }] },
   ford: { 'f-150': [{ make: 'chevrolet', model: 'silverado 1500' }, { make: 'ram', model: '1500' }] },
   jeep: { wrangler: [{ make: 'ford', model: 'bronco' }, { make: 'toyota', model: '4runner' }] },
-  kia: { soul: [{ make: 'honda', model: 'hr-v' }, { make: 'hyundai', model: 'kona' }] },
+  kia: { soul: [{ make: 'honda', model: 'hr-v' }, { make: 'hyundai', model: 'kona' }], telluride: [{ make: 'hyundai', model: 'palisade' }, { make: 'toyota', model: 'highlander' }] },
   tesla: { 'model 3': [{ make: 'chevrolet', model: 'bolt ev' }, { make: 'nissan', model: 'leaf' }] },
   chevrolet: { 'silverado 1500': [{ make: 'ford', model: 'f-150' }, { make: 'ram', model: '1500' }] },
   nissan: { altima: [{ make: 'toyota', model: 'camry' }, { make: 'honda', model: 'accord' }] },
@@ -1121,10 +1121,84 @@ function App() {
           </div>
         )}
 
+        {/* SEO content — only on home page */}
+        {isHome && (
+          <section className="mt-16 mb-8 space-y-10">
+            {/* How it works */}
+            <div>
+              <h2 className="text-gray-300 text-sm font-semibold mb-3">How to check recalls on your car</h2>
+              <p className="text-gray-500 text-xs leading-relaxed">
+                Enter your car's year, make, and model — or paste a 17-character VIN number — and get the full NHTSA recall history in seconds. Car Recall Checker pulls data directly from the National Highway Traffic Safety Administration and summarizes it in plain English. Works for all makes including Ford, Tesla, Kia, Honda, Toyota, Chevrolet, Jeep, Hyundai, and more.
+              </p>
+            </div>
+
+            {/* Popular checks — internal links for SEO -->*/}
+            <div>
+              <h2 className="text-gray-300 text-sm font-semibold mb-3">Popular recall checks</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {[
+                  { label: 'Ford F-150 recalls', path: '2023-ford-f-150' },
+                  { label: 'Tesla Model Y recalls', path: '2022-tesla-model-y' },
+                  { label: 'Tesla Model 3 recalls', path: '2021-tesla-model-3' },
+                  { label: 'Kia Telluride recalls', path: '2023-kia-telluride' },
+                  { label: 'Honda CR-V recalls', path: '2019-honda-cr-v' },
+                  { label: 'Ford Explorer recalls', path: '2020-ford-explorer' },
+                  { label: 'Toyota RAV4 recalls', path: '2021-toyota-rav4' },
+                  { label: 'Chevy Silverado recalls', path: '2019-chevrolet-silverado-1500' },
+                  { label: 'Jeep Wrangler recalls', path: '2020-jeep-wrangler' },
+                ].map((link) => (
+                  <a
+                    key={link.path}
+                    href={`/check/${link.path}`}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      const parts = link.path.split('-')
+                      const year = parts[0]
+                      const make = parts[1]
+                      const model = parts.slice(2).join(' ')
+                      setQuery(`${year} ${make} ${model}`)
+                      runSearch({ year, make, model })
+                    }}
+                    className="text-gray-500 hover:text-gray-300 text-[11px] transition-colors"
+                  >
+                    {link.label} →
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* FAQ — targets "how do I check recalls on my car" + related queries */}
+            <div>
+              <h2 className="text-gray-300 text-sm font-semibold mb-3">Frequently asked questions</h2>
+              <div className="space-y-4">
+                {[
+                  { q: 'How do I check car recalls?', a: 'Enter any year, make, and model into the search box above — for example "2023 Ford F-150" — and we\'ll show you every NHTSA recall, consumer complaint, and safety investigation on record.' },
+                  { q: 'Can I look up recalls by VIN number?', a: 'Yes. Paste your 17-character VIN and we\'ll decode it to identify your exact vehicle, then show all recalls that apply to your specific car.' },
+                  { q: 'Is this free?', a: 'Completely free. We use public NHTSA data from the National Highway Traffic Safety Administration. No account needed.' },
+                  { q: 'What data do you show?', a: 'Recalls, consumer complaints (including crashes, fires, injuries), active investigations, and a plain-English safety verdict with specific next steps for buyers.' },
+                ].map(({ q, a }) => (
+                  <details key={q} className="group">
+                    <summary className="text-gray-400 text-xs cursor-pointer hover:text-gray-300 transition-colors list-none flex items-center gap-2">
+                      <svg className="w-3 h-3 shrink-0 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                      {q}
+                    </summary>
+                    <p className="text-gray-500 text-[11px] mt-1.5 ml-5 leading-relaxed">{a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Footer */}
-        <footer className="text-center mt-12 pb-4">
-          <p className="text-gray-500 text-[11px] font-mono">
-            NHTSA &middot; National Highway Traffic Safety Administration
+        <footer className="text-center mt-8 pb-4 border-t border-gray-900 pt-4">
+          <p className="text-gray-600 text-[10px] font-mono">
+            Car Recall Checker &middot; Free NHTSA recall check &middot; Not affiliated with NHTSA
+          </p>
+          <p className="text-gray-700 text-[9px] mt-1">
+            Car recall lookup &middot; Check car recalls &middot; VIN number lookup &middot; Vehicle safety check
           </p>
         </footer>
       </div>

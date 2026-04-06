@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://car-recall-radar.vercel.app/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <!-- Ford recalls -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2017-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2018-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2022-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2023-ford-f-150</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-ford-explorer</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-ford-explorer</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-ford-escape</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-ford-bronco</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Tesla recalls -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2018-tesla-model-3</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-tesla-model-3</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-tesla-model-3</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-tesla-model-3</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-tesla-model-y</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-tesla-model-y</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2022-tesla-model-y</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2023-tesla-model-y</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <!-- Kia (rising: kia telluride) -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-kia-telluride</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-kia-telluride</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2022-kia-telluride</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2023-kia-telluride</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-kia-soul</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Honda -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-honda-cr-v</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-honda-cr-v</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-honda-cr-v</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-honda-civic</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-honda-accord</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Toyota -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-toyota-camry</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-toyota-rav4</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-toyota-corolla</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Jeep -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-jeep-wrangler</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-jeep-grand-cherokee</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Chevrolet -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-chevrolet-silverado-1500</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-chevrolet-equinox</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2022-chevrolet-bolt-ev</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Hyundai -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-hyundai-tucson</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2021-hyundai-elantra</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Nissan -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-nissan-rogue</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-nissan-altima</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- RAM -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2019-ram-1500</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <!-- Subaru -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-subaru-outback</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <!-- BMW -->
+  <url><loc>https://car-recall-radar.vercel.app/check/2020-bmw-3-series</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+</urlset>
