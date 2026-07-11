@@ -205,27 +205,84 @@ function generateHTML(vehicle, counts, templateHTML) {
     `<script type="application/ld+json">${structuredData}</script>\n</head>`
   )
 
-  // Add static SEO content before the React root — visible to crawlers, hidden once React loads
+  // Add static SEO content before the React root — a full, unique, standalone
+  // report so crawlers and AdSense reviewers see substantial content without JS.
+  const r = counts.recalls
+  const c = counts.complaints
+
+  const recallReading = r === 0
+    ? `No recalls are currently on file for the ${displayName}. That is a clean record, though you should still confirm by VIN, since records can update over time.`
+    : r <= 3
+      ? `${r} recall${r !== 1 ? 's are' : ' is'} on file — a typical, manageable number for a mainstream vehicle. Recalls are manufacturer-initiated repairs done for free, so having them addressed is a good thing. Confirm each one was completed on the specific car by VIN.`
+      : r <= 8
+        ? `${r} recalls are on file, which is on the higher side but common for popular, high-volume models. A high count alone does not make a car unsafe — what matters is whether the serious ones (brakes, airbags, steering, fire risk) have been repaired.`
+        : `${r} recalls are on file — a high count. This is often seen on best-selling vehicles simply because so many were produced. Focus on whether any safety-critical recalls remain open, and get VIN-specific repair records before buying.`
+
+  const complaintReading = c === 0
+    ? `No consumer complaints are recorded, which is unusual and generally positive.`
+    : c < 50
+      ? `${c} consumer complaint${c !== 1 ? 's have' : ' has'} been filed. That is a low volume — complaints are unverified owner reports, so look for patterns rather than reacting to any single entry.`
+      : c < 300
+        ? `${c} consumer complaints have been filed. Remember that popular vehicles naturally accumulate more complaints because far more were sold — compare against similar models rather than in isolation.`
+        : `${c} consumer complaints have been filed. High volume is expected for a top-selling model, but it is worth scanning which components appear most often and whether crashes or fires are mentioned.`
+
   const seoContent = `
-    <div id="seo-content" style="max-width:672px;margin:0 auto;padding:40px 16px;font-family:system-ui,sans-serif;color:#d1d5db;background:#030712;">
-      <h1 style="font-family:monospace;font-size:2rem;color:#fff;margin-bottom:8px;">${displayName} Safety Report</h1>
-      <p style="color:#9ca3af;margin-bottom:24px;">Free NHTSA recall and complaint lookup — Car Recall Checker</p>
-      <div style="display:flex;gap:16px;margin-bottom:24px;">
-        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:16px;text-align:center;flex:1;">
-          <div style="font-family:monospace;font-size:1.5rem;font-weight:bold;color:#fff;">${counts.recalls}</div>
+    <div id="seo-content" style="max-width:720px;margin:0 auto;padding:32px 20px 48px;font-family:system-ui,-apple-system,sans-serif;color:#cbd5e1;background:#030712;line-height:1.7;">
+      <nav style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding-bottom:20px;border-bottom:1px solid #1f2937;margin-bottom:28px;font-size:13px;">
+        <a href="/" style="font-family:ui-monospace,monospace;font-weight:700;color:#fff;text-decoration:none;margin-right:auto;">Car Recall Checker</a>
+        <a href="/" style="color:#9ca3af;text-decoration:none;">Recall Checker</a>
+        <a href="/guides/" style="color:#9ca3af;text-decoration:none;">Guides</a>
+        <a href="/about/" style="color:#9ca3af;text-decoration:none;">About</a>
+      </nav>
+      <h1 style="font-family:ui-monospace,monospace;font-size:1.9rem;line-height:1.25;color:#fff;margin:0 0 8px;">${displayName} Recalls &amp; Safety Report</h1>
+      <p style="color:#9ca3af;margin:0 0 24px;font-size:15px;">Free NHTSA recall, complaint, and investigation lookup — updated from federal data.</p>
+      <div style="display:flex;gap:16px;margin-bottom:28px;">
+        <div style="background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:16px;text-align:center;flex:1;">
+          <div style="font-family:ui-monospace,monospace;font-size:1.6rem;font-weight:bold;color:#fff;">${r}</div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:#9ca3af;margin-top:4px;">Recalls</div>
         </div>
-        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:16px;text-align:center;flex:1;">
-          <div style="font-family:monospace;font-size:1.5rem;font-weight:bold;color:#fff;">${counts.complaints}</div>
+        <div style="background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:16px;text-align:center;flex:1;">
+          <div style="font-family:ui-monospace,monospace;font-size:1.6rem;font-weight:bold;color:#fff;">${c}</div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:#9ca3af;margin-top:4px;">Complaints</div>
         </div>
       </div>
-      <p style="color:#d1d5db;line-height:1.6;margin-bottom:16px;">
-        The ${displayName} has ${counts.recalls} recall${counts.recalls !== 1 ? 's' : ''} and ${counts.complaints} consumer complaint${counts.complaints !== 1 ? 's' : ''} filed with the National Highway Traffic Safety Administration (NHTSA).
-        ${counts.recalls > 5 ? 'This is a higher-than-average recall count — check which ones have been completed.' : ''}
-        ${counts.complaints > 100 ? 'The complaint volume is significant — review the details before purchasing.' : ''}
-      </p>
-      <p style="color:#9ca3af;font-size:14px;">Loading full safety brief...</p>
+
+      <h2 style="color:#fff;font-size:1.2rem;margin:28px 0 8px;">Recall summary</h2>
+      <p style="margin:0 0 16px;">The ${displayName} has <strong>${r} recall${r !== 1 ? 's' : ''}</strong> on record with the National Highway Traffic Safety Administration (NHTSA). ${recallReading}</p>
+
+      <h2 style="color:#fff;font-size:1.2rem;margin:28px 0 8px;">Complaint summary</h2>
+      <p style="margin:0 0 16px;">Owners have filed <strong>${c} complaint${c !== 1 ? 's' : ''}</strong> about the ${displayName}. ${complaintReading} Complaints can flag crashes, fires, and injuries, so it is worth reviewing which systems appear most often.</p>
+
+      <h2 style="color:#fff;font-size:1.2rem;margin:28px 0 8px;">Before you buy a ${displayName}</h2>
+      <ul style="padding-left:22px;margin:0 0 16px;">
+        <li style="margin:6px 0;">Get the 17-character VIN and confirm whether any recall is still <em>open</em> (unrepaired) on that specific car.</li>
+        <li style="margin:6px 0;">Ask the seller for recall completion records, especially for any brake, airbag, steering, or fire-related campaign.</li>
+        <li style="margin:6px 0;">Have an independent mechanic inspect the systems that appear most in the complaint history.</li>
+        <li style="margin:6px 0;">Remember: any franchised dealer will complete outstanding recall repairs for free, even for a used-car buyer.</li>
+      </ul>
+
+      <div style="background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:18px 20px;margin:24px 0;">
+        <p style="margin:0;">Want the full breakdown — complaint categories, crash and fire counts, active investigations, and a plain-English verdict comparing this car to its competitors? The interactive report loads below.</p>
+      </div>
+
+      <h2 style="color:#fff;font-size:1.2rem;margin:28px 0 8px;">Frequently asked questions</h2>
+      <h3 style="color:#e5e7eb;font-size:1rem;margin:18px 0 4px;">Is the ${displayName} safe to buy used?</h3>
+      <p style="margin:0 0 14px;">With ${r} recall${r !== 1 ? 's' : ''} and ${c} complaint${c !== 1 ? 's' : ''} on file, the ${displayName} is a ${r > 8 || c > 300 ? 'higher-volume' : 'typical'} record for its class. Safety depends less on the totals and more on whether serious recalls are repaired — always verify by VIN.</p>
+      <h3 style="color:#e5e7eb;font-size:1rem;margin:18px 0 4px;">How do I check recalls on a ${titleCase(make)} by VIN?</h3>
+      <p style="margin:0 0 14px;">Find the VIN on the driver's door jamb, windshield, or registration, then paste it into <a href="/" style="color:#93c5fd;">Car Recall Checker</a> or NHTSA.gov to see recalls specific to that vehicle.</p>
+      <h3 style="color:#e5e7eb;font-size:1rem;margin:18px 0 4px;">Are recall repairs free?</h3>
+      <p style="margin:0 0 14px;">Yes. Manufacturers must repair safety recalls at no cost, regardless of whether you are the original owner.</p>
+
+      <p style="margin:20px 0 0;font-size:14px;color:#9ca3af;">Learn more: <a href="/guides/how-to-check-car-recalls/" style="color:#93c5fd;">How to check car recalls</a> &middot; <a href="/guides/what-to-do-if-your-car-is-recalled/" style="color:#93c5fd;">What to do if your car is recalled</a> &middot; <a href="/guides/recalls-complaints-investigations-explained/" style="color:#93c5fd;">Recalls vs. complaints vs. investigations</a></p>
+
+      <div style="border-top:1px solid #1f2937;margin-top:32px;padding-top:18px;display:flex;gap:16px;flex-wrap:wrap;">
+        <a href="/about/" style="color:#9ca3af;font-size:13px;text-decoration:none;">About</a>
+        <a href="/guides/" style="color:#9ca3af;font-size:13px;text-decoration:none;">Guides</a>
+        <a href="/privacy/" style="color:#9ca3af;font-size:13px;text-decoration:none;">Privacy Policy</a>
+        <a href="/terms/" style="color:#9ca3af;font-size:13px;text-decoration:none;">Terms &amp; Disclaimer</a>
+        <a href="/contact/" style="color:#9ca3af;font-size:13px;text-decoration:none;">Contact</a>
+      </div>
+      <p style="color:#6b7280;font-size:12px;margin:14px 0 0;">Data from NHTSA. Independent tool, not affiliated with NHTSA or any manufacturer. Always confirm recall status by VIN at NHTSA.gov/recalls.</p>
     </div>`
 
   html = html.replace(
@@ -272,9 +329,17 @@ async function main() {
   }
 
   // Generate a sitemap
+  const CONTENT_PAGES = [
+    'about', 'guides', 'contact', 'privacy', 'terms',
+    'guides/how-to-check-car-recalls',
+    'guides/what-to-do-if-your-car-is-recalled',
+    'guides/recalls-complaints-investigations-explained',
+  ]
+
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://car-recall-radar.vercel.app</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+${CONTENT_PAGES.map(p => `  <url><loc>https://car-recall-radar.vercel.app/${p}</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>`).join('\n')}
 ${VEHICLES.map(v => `  <url><loc>https://car-recall-radar.vercel.app/check/${slug(v)}</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>`).join('\n')}
 </urlset>`
 

@@ -9,6 +9,6 @@
   },
   "rewrites": [
     { "source": "/check/:path*", "destination": "/check/:path*" },
-    { "source": "/((?!api|assets|check|favicon|robots|sitemap).*)", "destination": "/index.html" }
+    { "source": "/((?!api|assets|check|about|privacy|contact|terms|guides|favicon|robots|sitemap).*)", "destination": "/index.html" }
   ]
 }

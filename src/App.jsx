@@ -1194,6 +1194,13 @@ function App() {
 
         {/* Footer */}
         <footer className="text-center mt-8 pb-4 border-t border-gray-900 pt-4">
+          <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1 mb-3">
+            <a href="/about/" className="text-gray-500 hover:text-gray-300 text-[11px] transition-colors">About</a>
+            <a href="/guides/" className="text-gray-500 hover:text-gray-300 text-[11px] transition-colors">Guides</a>
+            <a href="/privacy/" className="text-gray-500 hover:text-gray-300 text-[11px] transition-colors">Privacy Policy</a>
+            <a href="/terms/" className="text-gray-500 hover:text-gray-300 text-[11px] transition-colors">Terms &amp; Disclaimer</a>
+            <a href="/contact/" className="text-gray-500 hover:text-gray-300 text-[11px] transition-colors">Contact</a>
+          </nav>
           <p className="text-gray-600 text-[10px] font-mono">
             Car Recall Checker &middot; Free NHTSA recall check &middot; Not affiliated with NHTSA
           </p>
